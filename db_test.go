@@ -288,5 +288,25 @@ func TestUnmarshalRaw(t *testing.T) {
 		panic("select should return an empty result")
 	}
 
+	username2 := "jim"
+	password2 := "321"
+
+	userData, err = db.Query("create users:jim set Username = $user, Password = $pass", map[string]interface{}{
+		"user": username2,
+		"pass": password2,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	var user2 testUser
+	ok, err = surrealdb.UnmarshalRaw(userData, &user2)
+	if err != nil {
+		panic(err)
+	}
+
+	var response interface{}
+	response, err = db.Query(fmt.Sprintf("relate %s->knows->%s", user.ID, user2.ID), nil)
+
 	// Output:
 }

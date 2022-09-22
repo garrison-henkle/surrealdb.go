@@ -201,7 +201,9 @@ func (self *WS) write(v interface{}) (err error) {
 		return err
 	}
 
-	err = json.NewEncoder(w).Encode(v)
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	err = encoder.Encode(v)
 	if err != nil {
 		return err
 	}
