@@ -23,87 +23,87 @@ func New(url string) (*DB, error) {
 // --------------------------------------------------
 
 // Close closes the underlying WebSocket connection.
-func (self *DB) Close() {
-	self.ws.Close()
+func (database *DB) Close() error{
+	return database.ws.Close()
 }
 
 // --------------------------------------------------
 
 // Use is a method to select the namespace and table to use.
-func (self *DB) Use(ns string, db string) (interface{}, error) {
-	return self.send("use", ns, db)
+func (database *DB) Use(ns string, db string) (interface{}, error) {
+	return database.send("use", ns, db)
 }
 
-func (self *DB) Info() (interface{}, error) {
-	return self.send("info")
+func (database *DB) Info() (interface{}, error) {
+	return database.send("info")
 }
 
 // SignUp is a helper method for signing up a new user.
-func (self *DB) Signup(vars map[string]interface{}) (interface{}, error) {
-	return self.send("signup", vars)
+func (database *DB) Signup(vars map[string]interface{}) (interface{}, error) {
+	return database.send("signup", vars)
 }
 
 // Signin is a helper method for signing in a user.
-func (self *DB) Signin(vars map[string]interface{}) (interface{}, error) {
-	return self.send("signin", vars)
+func (database *DB) Signin(vars map[string]interface{}) (interface{}, error) {
+	return database.send("signin", vars)
 }
 
-func (self *DB) Invalidate() (interface{}, error) {
-	return self.send("invalidate")
+func (database *DB) Invalidate() (interface{}, error) {
+	return database.send("invalidate")
 }
 
-func (self *DB) Authenticate(token string) (interface{}, error) {
-	return self.send("authenticate", token)
+func (database *DB) Authenticate(token string) (interface{}, error) {
+	return database.send("authenticate", token)
 }
 
 // --------------------------------------------------
 
-func (self *DB) Live(table string) (interface{}, error) {
-	return self.send("live", table)
+func (database *DB) Live(table string) (interface{}, error) {
+	return database.send("live", table)
 }
 
-func (self *DB) Kill(query string) (interface{}, error) {
-	return self.send("kill", query)
+func (database *DB) Kill(query string) (interface{}, error) {
+	return database.send("kill", query)
 }
 
-func (self *DB) Let(key string, val interface{}) (interface{}, error) {
-	return self.send("let", key, val)
+func (database *DB) Let(key string, val interface{}) (interface{}, error) {
+	return database.send("let", key, val)
 }
 
 // Query is a convenient method for sending a query to the database.
-func (self *DB) Query(sql string, vars map[string]interface{}) (interface{}, error) {
-	return self.send("query", sql, vars)
+func (database *DB) Query(sql string, vars map[string]interface{}) (interface{}, error) {
+	return database.send("query", sql, vars)
 }
 
 // Select a table or record from the database.
-func (self *DB) Select(what string) (interface{}, error) {
-	return self.send("select", what)
+func (database *DB) Select(what string) (interface{}, error) {
+	return database.send("select", what)
 }
 
 
 // Creates a table or record in the database like a POST request.
-func (self *DB) Create(thing string, data map[string]interface{}) (interface{}, error) {
-	return self.send("create", thing, data)
+func (database *DB) Create(thing string, data map[string]interface{}) (interface{}, error) {
+	return database.send("create", thing, data)
 }
 
 // Update a table or record in the database like a PUT request.
-func (self *DB) Update(what string, data map[string]interface{}) (interface{}, error) {
-	return self.send("update", what, data)
+func (database *DB) Update(what string, data map[string]interface{}) (interface{}, error) {
+	return database.send("update", what, data)
 }
 
 // Change a table or record in the database like a PATCH request.
-func (self *DB) Change(what string, data map[string]interface{}) (interface{}, error) {
-	return self.send("change", what, data)
+func (database *DB) Change(what string, data map[string]interface{}) (interface{}, error) {
+	return database.send("change", what, data)
 }
 
 // Modify applies a series of JSONPatches to a table or record.
-func (self *DB) Modify(what string, data map[string]interface{}) (interface{}, error) {
-	return self.send("modify", what, data)
+func (database *DB) Modify(what string, data map[string]interface{}) (interface{}, error) {
+	return database.send("modify", what, data)
 }
 
 // Delete a table or a row from the database like a DELETE request.
-func (self *DB) Delete(what string) (interface{}, error) {
-	return self.send("delete", what)
+func (database *DB) Delete(what string) (interface{}, error) {
+	return database.send("delete", what)
 }
 
 // --------------------------------------------------
@@ -111,14 +111,14 @@ func (self *DB) Delete(what string) (interface{}, error) {
 // --------------------------------------------------
 
 // send is a helper method for sending a query to the database.
-func (self *DB) send(method string, params ...interface{}) (interface{}, error) {
+func (database *DB) send(method string, params ...interface{}) (interface{}, error) {
 
 	// generate an id for the action, this is used to distinguish its response
 	id := xid(16)
 	// chn: the channel where the server response will arrive, err: the channel where errors will come
-	chn, err := self.ws.Once(id, method)
+	chn, err := database.ws.Once(id, method)
 	// here we send the args through our websocket connection
-	self.ws.Send(id, method, params)
+	database.ws.Send(id, method, params)
 
 	for {
 		select {
@@ -129,16 +129,16 @@ func (self *DB) send(method string, params ...interface{}) (interface{}, error) 
 				switch method {
 					case "delete":
 						return nil, nil
-					case "select":
-						return self.resp(method, params, r)
-					case "create":
-						return self.resp(method, params, r)
-					case "update":
-						return self.resp(method, params, r)
-					case "change":
-						return self.resp(method, params, r)
-					case "modify":
-						return self.resp(method, params, r)
+					//case "select":
+					//	return database.resp(method, params, r)
+					//case "create":
+					//	return database.resp(method, params, r)
+					//case "update":
+					//	return database.resp(method, params, r)
+					//case "change":
+					//	return database.resp(method, params, r)
+					//case "modify":
+					//	return database.resp(method, params, r)
 					default:
 						return r, nil
 				}
@@ -148,34 +148,9 @@ func (self *DB) send(method string, params ...interface{}) (interface{}, error) 
 }
 
 // resp is a helper method for parsing the response from a query.
-func (self *DB) resp(_ string, params []interface{}, result []byte) ([]byte, error) {
+func (database *DB) resp(_ string, _ []interface{}, result []byte) ([]byte, error) {
 
 	fmt.Println("result:", string(result))
-
-	arg, ok := params[0].(string)
-
-	//method doesn't use params, ie Invalidate
-	if !ok {
-		return result, nil
-	}
-
-	//parameter is a record id
-	fmt.Println("args:", arg)
-	//if strings.Contains(arg, ":") {
-	//
-	//	arr, ok := result.([]interface{})
-	//
-	//	if !ok {
-	//		return nil, PermissionError{what: arg}
-	//	}
-	//
-	//	if len(arr) < 1 {
-	//		return nil, PermissionError{what: arg}
-	//	}
-	//
-	//	return arr[0], nil
-	//
-	//}
 
 	return result, nil
 
