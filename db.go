@@ -1,7 +1,7 @@
 package surrealdb
 
 import (
-	"strings"
+	"fmt"
 )
 
 // DB is a client for the SurrealDB database that holds are websocket connection.
@@ -148,30 +148,35 @@ func (self *DB) send(method string, params ...interface{}) (interface{}, error) 
 }
 
 // resp is a helper method for parsing the response from a query.
-func (self *DB) resp(method string, params []interface{}, res interface{}) (interface{}, error) {
+func (self *DB) resp(_ string, params []interface{}, result []byte) ([]byte, error) {
+
+	fmt.Println("result:", string(result))
 
 	arg, ok := params[0].(string)
 
+	//method doesn't use params, ie Invalidate
 	if !ok {
-		return res, nil
+		return result, nil
 	}
 
-	if strings.Contains(arg, ":") {
+	//parameter is a record id
+	fmt.Println("args:", arg)
+	//if strings.Contains(arg, ":") {
+	//
+	//	arr, ok := result.([]interface{})
+	//
+	//	if !ok {
+	//		return nil, PermissionError{what: arg}
+	//	}
+	//
+	//	if len(arr) < 1 {
+	//		return nil, PermissionError{what: arg}
+	//	}
+	//
+	//	return arr[0], nil
+	//
+	//}
 
-		arr, ok := res.([]interface{})
-
-		if !ok {
-			return nil, PermissionError{what: arg}
-		}
-
-		if len(arr) < 1 {
-			return nil, PermissionError{what: arg}
-		}
-
-		return arr[0], nil
-
-	}
-
-	return res, nil
+	return result, nil
 
 }

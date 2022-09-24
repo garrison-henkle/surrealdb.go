@@ -2,7 +2,6 @@ package surrealdb_test
 
 import (
 	"fmt"
-
 	"github.com/surrealdb/surrealdb.go"
 )
 

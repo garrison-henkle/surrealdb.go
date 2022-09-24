@@ -2,20 +2,21 @@ package surrealdb
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
 type WS struct {
-	ws   *websocket.Conn // websocket connection
-	quit chan error // stops: MAIN LOOP
-	send chan<- *RPCRequest // sender channel
-	recv <-chan *RPCResponse // receive channel
+	ws   *websocket.Conn       // websocket connection
+	quit chan error            // stops: MAIN LOOP
+	send chan<- *RPCRequest    // sender channel
+	recv <-chan *RawRPCResponse // receive channel
 	emit struct {
 		lock sync.Mutex // pause threads to avoid conflicts
-		once map[interface{}][]func(error, interface{}) // once listeners
-		when map[interface{}][]func(error, interface{}) // when listeners
+		once map[interface{}][]func(error, []byte) // once listeners
+		when map[interface{}][]func(error, []byte) // when listeners
 	}
 }
 
@@ -41,17 +42,17 @@ func NewWebsocket(url string) (*WS, error) {
 // Public methods
 // --------------------------------------------------
 
-func (self *WS) Close() error {
+func (socket *WS) Close() error {
 
 	msg := websocket.FormatCloseMessage(1000, "")
-	return self.ws.WriteMessage(websocket.CloseMessage, msg)
+	return socket.ws.WriteMessage(websocket.CloseMessage, msg)
 
 }
 
-func (self *WS) Send(id string, method string, params []interface{}) {
+func (socket *WS) Send(id string, method string, params []interface{}) {
 
 	go func() {
-		self.send <- &RPCRequest{
+		socket.send <- &RPCRequest{
 			ID:     id,
 			Method: method,
 			Params: params,
@@ -61,12 +62,12 @@ func (self *WS) Send(id string, method string, params []interface{}) {
 }
 
 // Subscribe to once()
-func (self *WS) Once(id, method string) (<-chan interface{}, <-chan error) {
+func (socket *WS) Once(id, _ string) (<-chan []byte, <-chan error) {
 
 	err := make(chan error)
-	res := make(chan interface{})
+	res := make(chan []byte)
 
-	self.once(id, func(e error, r interface{}) {
+	socket.once(id, func(e error, r []byte) {
 		switch {
 		case e != nil:
 			err <- e
@@ -84,12 +85,12 @@ func (self *WS) Once(id, method string) (<-chan interface{}, <-chan error) {
 }
 
 // Subscribe to when()
-func (self *WS) When(id, method string) (<-chan interface{}, <-chan error) {
+func (socket *WS) When(id, _ string) (<-chan []byte, <-chan error) {
 
 	err := make(chan error)
-	res := make(chan interface{})
+	res := make(chan []byte)
 
-	self.when(id, func(e error, r interface{}) {
+	socket.when(id, func(e error, r []byte) {
 		switch {
 		case e != nil:
 			err <- e
@@ -106,101 +107,134 @@ func (self *WS) When(id, method string) (<-chan interface{}, <-chan error) {
 // Private methods
 // --------------------------------------------------
 
-func (self *WS) once(id interface{}, fn func(error, interface{})) {
+func (socket *WS) once(id interface{}, fn func(error, []byte)) {
 
 	// pauses traffic in others threads, so we can add the new listener without conflicts
-	self.emit.lock.Lock()
-	defer self.emit.lock.Unlock()
+	socket.emit.lock.Lock()
+	defer socket.emit.lock.Unlock()
 
 	// if its our first listener, we need to setup the map
-	if self.emit.once == nil {
-		self.emit.once = make(map[interface{}][]func(error, interface{}))
+	if socket.emit.once == nil {
+		socket.emit.once = make(map[interface{}][]func(error, []byte))
 	}
 
-	self.emit.once[id] = append(self.emit.once[id], fn)
+	socket.emit.once[id] = append(socket.emit.once[id], fn)
 
 }
 
-// WHEN SYSTEM ISN'T BEEING USED, MAYBE FOR FUTURE IN-DATABASE EVENTS AND/OR REAL TIME stuffs.
+// WHEN SYSTEM ISN'T BEING USED, MAYBE FOR FUTURE IN-DATABASE EVENTS AND/OR REAL TIME stuffs.
 
-func (self *WS) when(id interface{}, fn func(error, interface{})) {
+func (socket *WS) when(id interface{}, fn func(error, []byte)) {
 
 	// pauses traffic in others threads, so we can add the new listener without conflicts
-	self.emit.lock.Lock()
-	defer self.emit.lock.Unlock()
+	socket.emit.lock.Lock()
+	defer socket.emit.lock.Unlock()
 
 	// if its our first listener, we need to setup the map
-	if self.emit.when == nil {
-		self.emit.when = make(map[interface{}][]func(error, interface{}))
+	if socket.emit.when == nil {
+		socket.emit.when = make(map[interface{}][]func(error, []byte))
 	}
 
-	self.emit.when[id] = append(self.emit.when[id], fn)
+	socket.emit.when[id] = append(socket.emit.when[id], fn)
 
 }
 
-func (self *WS) done(id interface{}, err error, res interface{}) {
+func (socket *WS) done(id string, err error, result []byte) {
 
 	// pauses traffic in others threads, so we can modify listeners without conflicts
-	self.emit.lock.Lock()
-	defer self.emit.lock.Unlock()
+	socket.emit.lock.Lock()
+	defer socket.emit.lock.Unlock()
 
 	// if our events map exist
-	if self.emit.when != nil {
+	if socket.emit.when != nil {
 
 		// if theres some listener aiming to this id response
-		if _, ok := self.emit.when[id]; ok {
+		if _, ok := socket.emit.when[id]; ok {
 
 			// dispatch the event, starting from the end, so we prioritize the new ones
-			for i := len(self.emit.when[id]) - 1; i >= 0; i-- {
+			for i := len(socket.emit.when[id]) - 1; i >= 0; i-- {
 
 				// invoke callback
-				self.emit.when[id][i](err, res)
+				socket.emit.when[id][i](err, result)
 
 			}
 		}
 	}
 
 	// if our events map exist
-	if self.emit.once != nil {
+	if socket.emit.once != nil {
 
 		// if theres some listener aiming to this id response
-		if _, ok := self.emit.once[id]; ok {
+		if _, ok := socket.emit.once[id]; ok {
 
 			// dispatch the event, starting from the end, so we prioritize the new ones
-			for i := len(self.emit.once[id]) - 1; i >= 0; i-- {
+			for i := len(socket.emit.once[id]) - 1; i >= 0; i-- {
 
 				// invoke callback
-				self.emit.once[id][i](err, res)
+				socket.emit.once[id][i](err, result)
 
 				// erase this listener
-				self.emit.once[id][i] = nil
+				socket.emit.once[id][i] = nil
 
 				// remove this listener from the list
-				self.emit.once[id] = self.emit.once[id][:i]
+				socket.emit.once[id] = socket.emit.once[id][:i]
 			}
 		}
 	}
 
 }
 
-func (self *WS) read(v interface{}) (err error) {
-
-	_, r, err := self.ws.NextReader()
+func (socket *WS) read() (*RawRPCResponse, error) {
+	var err error
+	var bytes []byte
+	_, bytes, err = socket.ws.ReadMessage()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return json.NewDecoder(r).Decode(v)
+	//{"id":"e081647f2eb3abd9","result":""}
+	//0123456789012345678901234567890123456
+	//7-23 is id, 35-(len-2) is the the result
 
+	//{"id":"37dfcaeca4a44d39","error":{"code":-32000,"message":"There was a problem with the database: Parse error on line 1 at character 0 when parsing 'selec t* from testUsr where name = 'jimbo''"}}
+	//0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+	//0         1         2         3         4         5         6
+	//33-(len-1) is the error object
+
+	fmt.Println("reading raw:", string(bytes))
+
+	msgSize := len(bytes)
+	id := string(bytes[7:23])
+	response := RawRPCResponse{ ID: id }
+
+	//response will contain either a 'result' key or an 'error' key. The id section will always use an id of length 16
+	//per db.go's send(), so there will always be 25 bytes before this key's first character. if the 26th byte is r, the
+	//key must be 'result', otherwise it is 'error'.
+	//'r' is ascii 114 (decimal)
+	if bytes[26] == 114{
+		payload := bytes[35:(msgSize - 2)]
+		response.Result = payload
+	} else{
+		payload := bytes[33:(msgSize - 1)]
+		var rpcError RPCError
+		err = json.Unmarshal(payload, &rpcError)
+		if err != nil{
+			return nil, err
+		}
+		response.Error = &rpcError
+	}
+
+	return &response, nil
 }
 
-func (self *WS) write(v interface{}) (err error) {
+func (socket *WS) write(v interface{}) (err error) {
 
-	w, err := self.ws.NextWriter(websocket.TextMessage)
+	w, err := socket.ws.NextWriter(websocket.TextMessage)
 	if err != nil {
 		return err
 	}
 
+	fmt.Println("write:", v)
 	err = json.NewEncoder(w).Encode(v)
 	if err != nil {
 		return err
@@ -210,9 +244,9 @@ func (self *WS) write(v interface{}) (err error) {
 
 }
 
-func (self *WS) initialise() {
+func (socket *WS) initialise() {
 	send := make(chan *RPCRequest)
-	recv := make(chan *RPCResponse)
+	recv := make(chan *RawRPCResponse)
 	quit := make(chan error, 1) // stops: MAIN LOOP
 	exit := make(chan int, 1)   // stops: RECEIVER LOOP, SENDER LOOP
 
@@ -226,18 +260,16 @@ func (self *WS) initialise() {
 				break loop // stops: THIS LOOP
 			default:
 
-				var res RPCResponse
-				err := self.read(&res) // wait and unmarshal UPCOMING response
+				response, err := socket.read() // wait and unmarshal UPCOMING response
 
 				if err != nil {
-					self.Close()
+					_ = socket.Close()
 					quit <- err // stops: MAIN LOOP
 					exit <- 0   // stops: RECEIVER LOOP, SENDER LOOP
 					break loop  // stops: THIS LOOP
 				}
 
-				recv <- &res // redirect response to: MAIN LOOP
-
+				recv <- response // redirect response to: MAIN LOOP
 			}
 		}
 	}()
@@ -252,10 +284,10 @@ func (self *WS) initialise() {
 				break loop // stops: THIS LOOP
 			case res := <-send:
 
-				err := self.write(res) // marshal and send
+				err := socket.write(res) // marshal and send
 
 				if err != nil {
-					self.Close()
+					_ = socket.Close()
 					quit <- err // stops: MAIN LOOP
 					exit <- 0   // stops: RECEIVER LOOP, SENDER LOOP
 					break loop  // stops: THIS LOOP
@@ -270,20 +302,21 @@ func (self *WS) initialise() {
 	go func() {
 		for {
 			select {
-			case <-self.quit:
+			case <-socket.quit:
 				break
-			case res := <-self.recv:
+			case res := <-socket.recv:
+
 				switch {
 				case res.Error == nil:
-					self.done(res.ID, nil, res.Result)
+					socket.done(res.ID, nil, res.Result)
 				case res.Error != nil:
-					self.done(res.ID, res.Error, res.Result)
+					socket.done(res.ID, res.Error, res.Result)
 				}
 			}
 		}
 	}()
 
-	self.send = send
-	self.recv = recv
-	self.quit = quit // stops: MAIN LOOP
+	socket.send = send
+	socket.recv = recv
+	socket.quit = quit // stops: MAIN LOOP
 }

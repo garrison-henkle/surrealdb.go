@@ -25,6 +25,13 @@ type RPCResponse struct {
 	Result interface{}       `json:"result,omitempty" msgpack:"result,omitempty"`
 }
 
+// RawRPCResponse represents an outgoing JSON-RPC response
+type RawRPCResponse struct{
+	ID     string       `json:"id" msgpack:"id"`
+	Error  *RPCError `json:"error,omitempty" msgpack:"error,omitempty"`
+	Result []byte       `json:"result,omitempty" msgpack:"result,omitempty"`
+}
+
 // RPCNotification represents an outgoing JSON-RPC notification
 type RPCNotification struct {
 	ID     interface{}    `json:"id" msgpack:"id"`
