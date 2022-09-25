@@ -2,16 +2,8 @@ package surrealdb
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
-)
-
-const statusOK = "OK"
-
-var (
-	InvalidResponse = errors.New("invalid SurrealDB response")
-	QueryError      = errors.New("error occurred processing the SurrealDB query")
 )
 
 // DB is a client for the SurrealDB database that holds are websocket connection.
@@ -148,7 +140,7 @@ func (database *DB) send(method string, container interface{}, params ...interfa
 			case "delete":
 				return true, nil
 			case "query":
-				return database.unmarshalRaw(params, r, container)
+				return database.unmarshalRaw(r, container)
 			case "select":
 				return database.unmarshal(params, r, container)
 			case "create":
@@ -166,13 +158,7 @@ func (database *DB) send(method string, container interface{}, params ...interfa
 	}
 }
 
-const (
-	leftBracket = 91
-	rightBracket = 93
-)
-//[{"result":[],
-//[{"result":[{"id":"testUser1:mhrzesa4616vv14xdq60","name":"jimbo"}],"status":"OK","time":"75.5µs"}]
-//0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
+const rightBracket = 93
 
 func getLastResultIndex(result []byte) (bool, int) {
 	resultLength := len(result)
@@ -188,7 +174,7 @@ func getLastResultIndex(result []byte) (bool, int) {
 	return true, endIndex
 }
 
-func (database *DB) unmarshalRaw(params []interface{}, result []byte, container interface{}) (bool, error){
+func (database *DB) unmarshalRaw(result []byte, container interface{}) (bool, error){
 	//first 11 characters are '[{"result":', so start on character 12 (index 11)
 	startIndex := 11
 	ok, endIndex := getLastResultIndex(result)
@@ -203,37 +189,9 @@ func (database *DB) unmarshalRaw(params []interface{}, result []byte, container 
 	if isSlice(container){
 		jsonBytes = result[startIndex:(endIndex + 1)]
 	} else{
-		ok, err = parseIfSingleObject(params, result, startIndex, endIndex + 1, container)
-		if err != nil {
-			return false, err
-		}
-		if ok {
-			return true, nil
-		}
 		jsonBytes = result[(startIndex + 1):endIndex]
 	}
 	err = json.Unmarshal(jsonBytes, container)
-	if err != nil{
-		return false, err
-	}
-	return true, nil
-}
-
-func parseIfSingleObject(params []interface{}, result []byte, start int, end int, container interface{}) (bool, error){
-	//check for empty result
-	if end - start - 1 <= 0 {
-		return false, nil
-	}
-
-	//if the query was not for a specific record, return
-	arg, ok := params[0].(string)
-	if !ok || !strings.Contains(arg, ":"){
-		return false, nil
-	}
-
-	//strip the square brackets and marshal
-	jsonBytes := result[(start + 1):(end - 1)]
-	err := json.Unmarshal(jsonBytes, container)
 	if err != nil{
 		return false, err
 	}
@@ -249,21 +207,16 @@ func (database *DB) unmarshal(params []interface{}, result []byte, container int
 		return false, nil
 	}
 
-	ok, err := parseIfSingleObject(params, result, 0, resultLength, container)
-	if err != nil {
-		return false, err
-	}
-	if ok {
-		return true, nil
-	}
+	arg, ok := params[0].(string)
+	singleRecordRequested := ok && strings.Contains(arg, ":")
 
 	var jsonBytes []byte
-	if isSlice(container){
+	if !singleRecordRequested && isSlice(container){
 		jsonBytes = result
 	} else{
 		jsonBytes = result[1:(resultLength - 1)]
 	}
-	err = json.Unmarshal(jsonBytes, container)
+	err := json.Unmarshal(jsonBytes, container)
 	if err != nil{
 		return false, err
 	}
