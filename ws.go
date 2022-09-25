@@ -2,7 +2,6 @@ package surrealdb
 
 import (
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -194,14 +193,15 @@ func (socket *WS) read() (*RawRPCResponse, error) {
 
 	//{"id":"e081647f2eb3abd9","result":""}
 	//0123456789012345678901234567890123456
-	//7-23 is id, 35-(len-2) is the the result
+	//7-23 is id, 34-(len-1) is the the result
 
 	//{"id":"37dfcaeca4a44d39","error":{"code":-32000,"message":"There was a problem with the database: Parse error on line 1 at character 0 when parsing 'selec t* from testUsr where name = 'jimbo''"}}
 	//0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
 	//0         1         2         3         4         5         6
 	//33-(len-1) is the error object
 
-	fmt.Println("reading raw:", string(bytes))
+	//{"id":"533c59eb86e8f01c","result":[{"id":"testUser1:bqsg4vooolgye1jxgjc2","name":"jimbo"},{"id":"testUser1:skohu12qsxjbw4tamvy3","name":"jim"}]}
+	//0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
 
 	msgSize := len(bytes)
 	id := string(bytes[7:23])
@@ -212,7 +212,7 @@ func (socket *WS) read() (*RawRPCResponse, error) {
 	//key must be 'result', otherwise it is 'error'.
 	//'r' is ascii 114 (decimal)
 	if bytes[26] == 114{
-		payload := bytes[35:(msgSize - 2)]
+		payload := bytes[34:(msgSize - 1)]
 		response.Result = payload
 	} else{
 		payload := bytes[33:(msgSize - 1)]
@@ -234,7 +234,6 @@ func (socket *WS) write(v interface{}) (err error) {
 		return err
 	}
 
-	fmt.Println("write:", v)
 	err = json.NewEncoder(w).Encode(v)
 	if err != nil {
 		return err
