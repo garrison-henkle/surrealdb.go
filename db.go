@@ -2,7 +2,6 @@ package surrealdb
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -34,17 +33,16 @@ type SurrealWSRawResult struct {
 	Error  error
 }
 
-func (r SurrealWSResult) Unmarshal(v interface{}) (bool, error) {
+func (r SurrealWSResult) Unmarshal(v interface{}) error {
 	if r.Error != nil {
-		fmt.Println("unmarshal error")
-		return false, r.Error
+		return r.Error
 	}
 
 	resultLength := len(r.Result)
 
 	//check for empty result
-	if resultLength-2 <= 0 {
-		return false, nil
+	if (resultLength - 2) <= 0 {
+		return ErrNoResult
 	}
 
 	var jsonBytes []byte
@@ -54,32 +52,25 @@ func (r SurrealWSResult) Unmarshal(v interface{}) (bool, error) {
 		jsonBytes = r.Result[1:(resultLength - 1)]
 	}
 	err := json.Unmarshal(jsonBytes, v)
-	fmt.Println("raw bytes", string(jsonBytes))
 	if err != nil {
-		return false, ErrInvalidSurrealResponse{Cause: err}
+		return ErrInvalidSurrealResponse{Cause: err}
 	}
-	return true, nil
+	return nil
 }
 
-const LeftBracket = 91
-
-var ErrUnexpectedSlice = errors.New("tried to unmarshal slice data into a non-slice container")
-
-func (r SurrealWSRawResult) UnmarshalRaw(v interface{}) (bool, error) {
+func (r SurrealWSRawResult) Unmarshal(v interface{}) error {
 	if r.Error != nil {
-		return false, r.Error
+		return r.Error
 	}
 
-	fmt.Println("raw json:", string(r.Result))
-
+	responseLength := len(r.Result)
+	if responseLength <= 2 {
+		return ErrInvalidSurrealResponse{}
+	}
 	var rawJson map[string]json.RawMessage
-	err := json.Unmarshal(r.Result, &rawJson)
-
+	err := json.Unmarshal(r.Result[1:(responseLength-1)], &rawJson)
 	if err != nil {
-		//todo find a better way of capturing array results or at the very least capture when the error is
-		var rawJsons []map[string]json.RawMessage
-		err := json.Unmarshal(r.Result, &rawJsons)
-		return false, ErrInvalidSurrealResponse{Cause: err}
+		return ErrInvalidSurrealResponse{Cause: err}
 	}
 
 	rpcErrBytes, errOccurred := rawJson["error"]
@@ -87,21 +78,21 @@ func (r SurrealWSRawResult) UnmarshalRaw(v interface{}) (bool, error) {
 		var rpcErr RPCError
 		err = json.Unmarshal(rpcErrBytes, &rpcErr)
 		if err != nil {
-			return false, ErrInvalidSurrealResponse{Cause: err}
+			return ErrInvalidSurrealResponse{Cause: err}
 		}
-		return false, &rpcErr
+		return &rpcErr
 	}
 
 	var result []byte
 	result, ok := rawJson["result"]
 	if !ok {
-		return false, ErrInvalidSurrealResponse{}
+		return ErrInvalidSurrealResponse{}
 	}
 	resultLength := len(result)
 
 	//check for empty result
 	if (resultLength - 2) <= 0 {
-		return false, nil
+		return ErrNoResult
 	}
 
 	var jsonBytes []byte
@@ -112,10 +103,9 @@ func (r SurrealWSRawResult) UnmarshalRaw(v interface{}) (bool, error) {
 	}
 	err = json.Unmarshal(jsonBytes, v)
 	if err != nil {
-		fmt.Println(3)
-		return false, ErrInvalidSurrealResponse{Cause: err}
+		return ErrUnableToUnmarshal{Cause: err}
 	}
-	return true, nil
+	return nil
 }
 
 // --------------------------------------------------

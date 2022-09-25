@@ -2,7 +2,6 @@ package surrealdb
 
 import (
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -50,14 +49,6 @@ func (socket *WS) Close() error {
 }
 
 func (socket *WS) Send(id string, method string, params []interface{}) {
-
-	request := RPCRequest{
-		ID:     id,
-		Method: method,
-		Params: params,
-	}
-
-	fmt.Println("request:", request)
 
 	go func() {
 		socket.send <- &RPCRequest{
@@ -189,7 +180,6 @@ func (socket *WS) done(id string, err error, result []byte) {
 			}
 		}
 	}
-
 }
 
 func (socket *WS) read() (*RawRPCResponse, error) {
@@ -199,8 +189,6 @@ func (socket *WS) read() (*RawRPCResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Println("read:", string(bytes))
 
 	var rawJson map[string]json.RawMessage
 	err = json.Unmarshal(bytes, &rawJson)

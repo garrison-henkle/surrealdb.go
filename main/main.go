@@ -32,132 +32,89 @@ func main() {
 
 	err = db.Delete("testUser")
 
-	var ok bool
 	var jim testUser
-	ok, err = db.Create("testUser", map[string]interface{}{
+	err = db.Create("testUser", map[string]interface{}{
 		"name": "jim",
 	}).Unmarshal(&jim)
 
 	if err != nil {
 		panic(err)
 	}
-	if !ok {
-		fmt.Println("jim 1 response was empty")
-	} else {
-		fmt.Println("jim 1:", jim)
-	}
+	fmt.Println("jim 1:", jim)
 
 	var jims []testUser
-	ok, err = db.Select("testUser").Unmarshal(&jims)
+	err = db.Select("testUser").Unmarshal(&jims)
 	if err != nil {
 		panic(err)
 	}
-	if !ok {
-		fmt.Println("jims response was empty")
-	} else {
-		fmt.Println("jims:", jims)
-	}
+	fmt.Println("jims:", jims)
 
-	ok, err = db.Select("testUser").Unmarshal(&jim)
+	err = db.Select("testUser").Unmarshal(&jim)
 	if err != nil {
 		panic(err)
 	}
-	if !ok {
-		fmt.Println("jim 2 response was empty")
-	} else {
-		fmt.Println("jim 2:", jim)
-	}
+	fmt.Println("jim 2:", jim)
 
-	ok, err = db.Select("testUser").Unmarshal(&jim)
-	if err != nil {
+	err = db.Select("testUser").Unmarshal(&jim)
+	if err != nil && err != surrealdb.ErrNoResult {
 		panic(err)
 	}
-	if !ok {
-		fmt.Println("no jims response was empty")
-	} else {
-		fmt.Println("no jims:", jim)
-	}
+	fmt.Println("is no result:", err == surrealdb.ErrNoResult)
+	fmt.Println("no jims:", jim)
 
 	jimmySend := testUser{
 		Name: "Jimmy",
 	}
 	var jimmyReceive testUser
-	ok, err = db.Create("testUser", &jimmySend).Unmarshal(&jimmyReceive)
+	err = db.Create("testUser", &jimmySend).Unmarshal(&jimmyReceive)
 	if err != nil {
 		panic(err)
 	}
-	if !ok {
-		fmt.Println("jimmy response was empty")
-	} else {
-		fmt.Println("jimmy sent:", jimmySend)
-		fmt.Println("jimmy received:", jimmyReceive)
-	}
+	fmt.Println("jimmy sent:", jimmySend)
+	fmt.Println("jimmy received:", jimmyReceive)
 
 	jimmySend.ID = ""
 	jimmySend.Name = "jimmy 2"
-	ok, err = db.Update(jimmyReceive.ID, &jimmySend).Unmarshal(&jimmyReceive)
+	err = db.Update(jimmyReceive.ID, &jimmySend).Unmarshal(&jimmyReceive)
 	if err != nil {
 		panic(err)
 	}
-	if !ok {
-		fmt.Println("jimmy 2 response was empty")
-	} else {
-		fmt.Println("jimmy 2 sent:", jimmySend)
-		fmt.Println("jimmy 2 received:", jimmyReceive)
-	}
+	fmt.Println("jimmy 2 sent:", jimmySend)
+	fmt.Println("jimmy 2 received:", jimmyReceive)
 
 	var users []testUser
-	ok, err = db.Query("select * from testUser", nil).UnmarshalRaw(&users)
+	err = db.Query("select * from testUser", nil).Unmarshal(&users)
 	if err != nil {
 		panic(err)
 	}
-	if !ok {
-		fmt.Println("users response was empty")
-	} else {
-		fmt.Println("users:", users)
-	}
+	fmt.Println("users:", users)
 
 	var user testUser
-	ok, err = db.Query("select * from testUser where id = "+jimmyReceive.ID, nil).UnmarshalRaw(&user)
+	err = db.Query("select * from testUser where id = "+jimmyReceive.ID, nil).Unmarshal(&user)
 	if err != nil {
 		panic(err)
 	}
-	if !ok {
-		fmt.Println("users response was empty")
-	} else {
-		fmt.Println("user:", user)
-	}
+	fmt.Println("user:", user)
 
 	var users2 []testUser
-	ok, err = db.Query("select * from testUser where id = "+jimmyReceive.ID, nil).UnmarshalRaw(&users2)
+	err = db.Query("select * from testUser where id = "+jimmyReceive.ID, nil).Unmarshal(&users2)
 	if err != nil {
 		panic(err)
 	}
-	if !ok {
-		fmt.Println("users response was empty")
-	} else {
-		fmt.Println("user in slice:", users2)
-	}
+	fmt.Println("user in slice:", users2)
 
 	var user3 testUser
-	ok, err = db.Query("select * from testUser where name = 'jimmy'", nil).UnmarshalRaw(&user3)
-	if err != nil {
+	err = db.Query("select * from testUser where name = 'jimmy'", nil).Unmarshal(&user3)
+	if err != nil && err != surrealdb.ErrNoResult {
 		panic(err)
 	}
-	if !ok {
-		fmt.Println("users response was empty")
-	} else {
-		fmt.Println("user 3:", user3)
-	}
+	fmt.Println("user 3:", user3)
 
 	var user2 testUser
-	ok, err = db.Query("selec t* from testUsr where name = 'jim'", nil).UnmarshalRaw(&user2)
-	if err != nil {
-		panic(err)
+	err = db.Query("selec t* from testUsr where name = 'jim'", nil).Unmarshal(&user2)
+	if err == nil {
+		panic("query should fail")
 	}
-	if !ok {
-		fmt.Println("users response was empty")
-	} else {
-		fmt.Println("user 2:", user2)
-	}
+	fmt.Println("user 2 query successfully failed")
+
 }

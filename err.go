@@ -1,25 +1,33 @@
 package surrealdb
 
 import (
+	"errors"
 	"fmt"
 )
 
-type ErrNoPermission struct {
-	what string
-}
-
-func (e ErrNoPermission) Error() string {
-	return fmt.Sprint("Unable to access record:", e.what)
-}
+var (
+	ErrNoResult = errors.New("query returned no results")
+)
 
 type ErrInvalidSurrealResponse struct {
 	Cause error
 }
 
 func (e ErrInvalidSurrealResponse) Error() string {
-	msg := "The SurrealDB response is invalid and cannot be parsed"
-	if e.Cause != nil {
-		return fmt.Sprintf("%s. Cause: %s", msg, e.Cause.Error())
+	return generateErrorMsg("the SurrealDB response is invalid and cannot be parsed", e.Cause)
+}
+
+type ErrUnableToUnmarshal struct {
+	Cause error
+}
+
+func (e ErrUnableToUnmarshal) Error() string {
+	return generateErrorMsg("unable to marshal into provided container", e.Cause)
+}
+
+func generateErrorMsg(base string, err error) string {
+	if err != nil {
+		return fmt.Sprintf("%s. Cause: %s", base, err.Error())
 	}
-	return msg
+	return base
 }
