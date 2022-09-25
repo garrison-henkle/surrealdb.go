@@ -1,5 +1,5 @@
 module github.com/surrealdb/surrealdb.go
 
-go 1.18
+go 1.13
 
 require github.com/gorilla/websocket v1.5.0

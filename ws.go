@@ -18,8 +18,8 @@ type WS struct {
 		lock sync.Mutex // pause threads to avoid conflicts
 
 		// do the callbacks really need to be a list ?
-		once map[any][]func(error, any) // once listeners
-		when map[any][]func(error, any) // when listeners
+		once map[interface{}][]func(error, interface{}) // once listeners
+		when map[interface{}][]func(error, interface{}) // when listeners
 	}
 }
 
@@ -36,8 +36,8 @@ func NewWebsocket(ctx context.Context, url string) (*WS, error) {
 	ws := &WS{ws: so}
 
 	// initilialize the callback maps here so we don't need to check them at runtime
-	ws.emit.once = make(map[any][]func(error, any))
-	ws.emit.when = make(map[any][]func(error, any))
+	ws.emit.once = make(map[interface{}][]func(error, interface{}))
+	ws.emit.when = make(map[interface{}][]func(error, interface{}))
 
 	// setup loops and channels
 	ws.initialise(ctx)
@@ -57,7 +57,7 @@ func (ws *WS) Close() error {
 
 }
 
-func (ws *WS) Send(id string, method string, params []any) {
+func (ws *WS) Send(id string, method string, params []interface{}) {
 
 	go func() {
 		ws.send <- &RPCRequest{
@@ -70,7 +70,7 @@ func (ws *WS) Send(id string, method string, params []any) {
 }
 
 type responseValue struct {
-	value any
+	value interface{}
 	err   error
 }
 
@@ -79,7 +79,7 @@ func (ws *WS) Once(id, method string) <-chan responseValue {
 
 	out := make(chan responseValue)
 
-	ws.once(id, func(e error, r any) {
+	ws.once(id, func(e error, r interface{}) {
 		out <- responseValue{
 			value: r,
 			err:   e,
@@ -97,7 +97,7 @@ func (ws *WS) When(id, method string) <-chan responseValue {
 
 	out := make(chan responseValue)
 
-	ws.when(id, func(e error, r any) {
+	ws.when(id, func(e error, r interface{}) {
 		out <- responseValue{
 			value: r,
 			err:   e,
@@ -112,7 +112,7 @@ func (ws *WS) When(id, method string) <-chan responseValue {
 // Private methods
 // --------------------------------------------------
 
-func (ws *WS) once(id any, fn func(error, any)) {
+func (ws *WS) once(id interface{}, fn func(error, interface{})) {
 
 	// pauses traffic in others threads, so we can add the new listener without conflicts
 
@@ -125,7 +125,7 @@ func (ws *WS) once(id any, fn func(error, any)) {
 
 // WHEN SYSTEM ISN'T BEEING USED, MAYBE FOR FUTURE IN-DATABASE EVENTS AND/OR REAL TIME stuffs.
 
-func (ws *WS) when(id any, fn func(error, any)) {
+func (ws *WS) when(id interface{}, fn func(error, interface{})) {
 
 	// pauses traffic in others threads, so we can add the new listener without conflicts
 	ws.emit.lock.Lock()
@@ -135,7 +135,7 @@ func (ws *WS) when(id any, fn func(error, any)) {
 
 }
 
-func (ws *WS) done(id any, err error, res any) {
+func (ws *WS) done(id interface{}, err error, res interface{}) {
 
 	// pauses traffic in others threads, so we can modify listeners without conflicts
 	ws.emit.lock.Lock()
@@ -181,7 +181,7 @@ func (ws *WS) done(id any, err error, res any) {
 
 }
 
-func (ws *WS) read(v any) (err error) {
+func (ws *WS) read(v interface{}) (err error) {
 
 	_, r, err := ws.ws.NextReader()
 	if err != nil {
@@ -192,7 +192,7 @@ func (ws *WS) read(v any) (err error) {
 
 }
 
-func (ws *WS) write(v any) (err error) {
+func (ws *WS) write(v interface{}) (err error) {
 
 	w, err := ws.ws.NextWriter(websocket.TextMessage)
 	if err != nil {

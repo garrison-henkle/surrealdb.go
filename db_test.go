@@ -106,7 +106,7 @@ func ExampleDB_Create() {
 		panic(err)
 	}
 
-	userMap, err := db.Create(ctx, "users", map[string]any{
+	userMap, err := db.Create(ctx, "users", map[string]interface{}{
 		"username": "john",
 		"password": "123",
 	})
@@ -276,7 +276,7 @@ func TestUnmarshalRaw(t *testing.T) {
 
 	//create test user with raw SurrealQL and unmarshal
 
-	userData, err := db.Query(ctx, "create users:johnny set Username = $user, Password = $pass", map[string]any{
+	userData, err := db.Query(ctx, "create users:johnny set Username = $user, Password = $pass", map[string]interface{}{
 		"user": username,
 		"pass": password,
 	})
@@ -295,7 +295,7 @@ func TestUnmarshalRaw(t *testing.T) {
 
 	//send query with empty result and unmarshal
 
-	userData, err = db.Query(ctx, "select * from users where id = $id", map[string]any{
+	userData, err = db.Query(ctx, "select * from users where id = $id", map[string]interface{}{
 		"id": "users:jim",
 	})
 	if err != nil {
@@ -329,7 +329,7 @@ func ExampleDB_Modify() {
 	})
 	_, err = db.Use(ctx, "test", "test")
 
-	_, err = db.Create(ctx, "users:999", map[string]any{
+	_, err = db.Create(ctx, "users:999", map[string]interface{}{
 		"username": "john999",
 		"password": "123",
 	})
@@ -354,7 +354,7 @@ func ExampleDB_Modify() {
 	}
 
 	// // TODO: this needs to simplified for the end user somehow
-	fmt.Println((user2).(map[string]any)["age"])
+	fmt.Println((user2).(map[string]interface{})["age"])
 	//
 	// Output: 44
 }
