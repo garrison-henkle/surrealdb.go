@@ -74,8 +74,8 @@ type responseValue struct {
 	err   error
 }
 
-// Subscribe to once()
-func (ws *WS) Once(id, method string) <-chan responseValue {
+// Once subscribes to once()
+func (ws *WS) Once(id, _ string) <-chan responseValue {
 
 	out := make(chan responseValue)
 
@@ -91,7 +91,7 @@ func (ws *WS) Once(id, method string) <-chan responseValue {
 
 }
 
-// Subscribe to when()
+// When subscribes to when()
 func (ws *WS) When(id, _ string) <-chan responseValue {
 	// TODO: make this cancellable (use of context.Context ?)
 
@@ -246,7 +246,7 @@ func (ws *WS) write(v interface{}) (err error) {
 
 func (ws *WS) initialise(ctx context.Context) {
 	send := make(chan *RPCRequest)
-	recv := make(chan *RPCResponse)
+	recv := make(chan *RawRPCResponse)
 	ctx, cancel := context.WithCancel(ctx)
 
 	// RECEIVER LOOP
@@ -283,7 +283,7 @@ func (ws *WS) initialise(ctx context.Context) {
 				err := ws.write(res) // marshal and send
 
 				if err != nil {
-					ws.Close()
+					_ = ws.Close()
 					cancel()
 					return // stops: THIS LOOP
 				}

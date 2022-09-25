@@ -201,46 +201,48 @@ func (db *DB) Delete(ctx context.Context, what string) error {
 // --------------------------------------------------
 
 // send is a helper method for sending a query to the database.
-func (database *DB) send(ctx context.Context, method string, params ...interface{}) *SurrealWSResult {
-	response, err := sendMessage(database.ws, method, params)
+func (db *DB) send(ctx context.Context, method string, params ...interface{}) *SurrealWSResult {
+	response := sendMessage(db.ws, method, params)
 	for {
 		select {
 		case <-ctx.Done():
 			return &SurrealWSResult{Error: ctx.Err()}
-		case result := <-response:
+		case r := <-response:
 			arg, ok := params[0].(string)
 			singleRecordRequested := ok && strings.Contains(arg, ":")
-			return &SurrealWSResult{
-				Result: result,
-				Single: singleRecordRequested,
-			}
+			var result SurrealWSResult
+			result.Result = r.value
+			result.Error = r.err
+			result.Single = singleRecordRequested
+			return &result
 		}
 	}
 }
 
-func (database *DB) sendRaw(method string, params ...interface{}) *SurrealWSRawResult {
-	response, err := sendMessage(database.ws, method, params)
+func (db *DB) sendRaw(ctx context.Context, method string, params ...interface{}) *SurrealWSRawResult {
+	response := sendMessage(db.ws, method, params)
 	for {
 		select {
 		default:
-		case e := <-err:
-			return &SurrealWSRawResult{Error: e}
-		case result := <-response:
-			return &SurrealWSRawResult{
-				Result: result,
-			}
+		case <-ctx.Done():
+			return &SurrealWSRawResult{Error: ctx.Err()}
+		case r := <-response:
+			var result SurrealWSRawResult
+			result.Result = r.value
+			result.Error = r.err
+			return &result
 		}
 	}
 }
 
-func sendMessage(ws *WS, method string, params []interface{}) (responseChannel <-chan []byte, errorChannel <-chan error) {
+func sendMessage(ws *WS, method string, params []interface{}) (responseChannel <-chan responseValue) {
 	// generate an id for the action, this is used to distinguish its response
-	id := xid(16)
+	id := xid()
 	// chn: the channel where the server response will arrive, err: the channel where errors will come
-	responseChannel, errorChannel = ws.Once(id, method)
+	responseChannel = ws.Once(id, method)
 	// here we send the args through our websocket connection
 	ws.Send(id, method, params)
-	return responseChannel, errorChannel
+	return responseChannel
 }
 
 func isSlice(possibleSlice interface{}) bool {

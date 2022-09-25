@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/surrealdb/surrealdb.go"
 )
@@ -15,7 +16,10 @@ func (t testUser) String() string {
 }
 
 func main() {
-	db, err := surrealdb.New("ws://localhost:8000/rpc")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	db, err := surrealdb.New(ctx, "ws://localhost:8000/rpc")
 	if err != nil {
 		panic(err)
 	}
@@ -23,17 +27,17 @@ func main() {
 		_ = db.Close()
 	}(db)
 
-	err = db.Signin(map[string]interface{}{
-		"user": "root",
-		"pass": "root",
+	err = db.Signin(ctx, surrealdb.UserInfo{
+		User:     "root",
+		Password: "root",
 	})
 
-	err = db.Use("test", "test")
+	err = db.Use(ctx, "test", "test")
 
-	err = db.Delete("testUser")
+	err = db.Delete(ctx, "testUser")
 
 	var jim testUser
-	err = db.Create("testUser", map[string]interface{}{
+	err = db.Create(ctx, "testUser", map[string]interface{}{
 		"name": "jim",
 	}).Unmarshal(&jim)
 
@@ -43,19 +47,19 @@ func main() {
 	fmt.Println("jim 1:", jim)
 
 	var jims []testUser
-	err = db.Select("testUser").Unmarshal(&jims)
+	err = db.Select(ctx, "testUser").Unmarshal(&jims)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("jims:", jims)
 
-	err = db.Select("testUser").Unmarshal(&jim)
+	err = db.Select(ctx, "testUser").Unmarshal(&jim)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("jim 2:", jim)
 
-	err = db.Select("testUser").Unmarshal(&jim)
+	err = db.Select(ctx, "testUser").Unmarshal(&jim)
 	if err != nil && err != surrealdb.ErrNoResult {
 		panic(err)
 	}
@@ -66,7 +70,7 @@ func main() {
 		Name: "Jimmy",
 	}
 	var jimmyReceive testUser
-	err = db.Create("testUser", &jimmySend).Unmarshal(&jimmyReceive)
+	err = db.Create(ctx, "testUser", &jimmySend).Unmarshal(&jimmyReceive)
 	if err != nil {
 		panic(err)
 	}
@@ -75,7 +79,7 @@ func main() {
 
 	jimmySend.ID = ""
 	jimmySend.Name = "jimmy 2"
-	err = db.Update(jimmyReceive.ID, &jimmySend).Unmarshal(&jimmyReceive)
+	err = db.Update(ctx, jimmyReceive.ID, &jimmySend).Unmarshal(&jimmyReceive)
 	if err != nil {
 		panic(err)
 	}
@@ -83,35 +87,35 @@ func main() {
 	fmt.Println("jimmy 2 received:", jimmyReceive)
 
 	var users []testUser
-	err = db.Query("select * from testUser", nil).Unmarshal(&users)
+	err = db.Query(ctx, "select * from testUser", nil).Unmarshal(&users)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("users:", users)
 
 	var user testUser
-	err = db.Query("select * from testUser where id = "+jimmyReceive.ID, nil).Unmarshal(&user)
+	err = db.Query(ctx, "select * from testUser where id = "+jimmyReceive.ID, nil).Unmarshal(&user)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("user:", user)
 
 	var users2 []testUser
-	err = db.Query("select * from testUser where id = "+jimmyReceive.ID, nil).Unmarshal(&users2)
+	err = db.Query(ctx, "select * from testUser where id = "+jimmyReceive.ID, nil).Unmarshal(&users2)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("user in slice:", users2)
 
 	var user3 testUser
-	err = db.Query("select * from testUser where name = 'jimmy'", nil).Unmarshal(&user3)
+	err = db.Query(ctx, "select * from testUser where name = 'jimmy'", nil).Unmarshal(&user3)
 	if err != nil && err != surrealdb.ErrNoResult {
 		panic(err)
 	}
 	fmt.Println("user 3:", user3)
 
 	var user2 testUser
-	err = db.Query("selec t* from testUsr where name = 'jim'", nil).Unmarshal(&user2)
+	err = db.Query(ctx, "selec t* from testUsr where name = 'jim'", nil).Unmarshal(&user2)
 	if err == nil {
 		panic("query should fail")
 	}
