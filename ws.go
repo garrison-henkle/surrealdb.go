@@ -2,18 +2,19 @@ package surrealdb
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
 type WS struct {
-	ws   *websocket.Conn       // websocket connection
-	quit chan error            // stops: MAIN LOOP
-	send chan<- *RPCRequest    // sender channel
+	ws   *websocket.Conn        // websocket connection
+	quit chan error             // stops: MAIN LOOP
+	send chan<- *RPCRequest     // sender channel
 	recv <-chan *RawRPCResponse // receive channel
 	emit struct {
-		lock sync.Mutex // pause threads to avoid conflicts
+		lock sync.Mutex                            // pause threads to avoid conflicts
 		once map[interface{}][]func(error, []byte) // once listeners
 		when map[interface{}][]func(error, []byte) // when listeners
 	}
@@ -49,6 +50,14 @@ func (socket *WS) Close() error {
 }
 
 func (socket *WS) Send(id string, method string, params []interface{}) {
+
+	request := RPCRequest{
+		ID:     id,
+		Method: method,
+		Params: params,
+	}
+
+	fmt.Println("request:", request)
 
 	go func() {
 		socket.send <- &RPCRequest{
@@ -191,28 +200,43 @@ func (socket *WS) read() (*RawRPCResponse, error) {
 		return nil, err
 	}
 
-	msgSize := len(bytes)
-	id := string(bytes[7:23])
-	response := RawRPCResponse{ ID: id }
+	fmt.Println("read:", string(bytes))
 
-	//response will contain either a 'result' key or an 'error' key. The id section will always use an id of length 16
-	//per db.go's send(), so there will always be 25 bytes before this key's first character. if the 26th byte is r, the
-	//key must be 'result', otherwise it is 'error'.
-	//'r' is ascii 114 (decimal)
-	if bytes[26] == 114{
-		payload := bytes[34:(msgSize - 1)]
-		response.Result = payload
-	} else{
-		payload := bytes[33:(msgSize - 1)]
-		var rpcError RPCError
-		err = json.Unmarshal(payload, &rpcError)
-		if err != nil{
-			return nil, err
-		}
-		response.Error = &rpcError
+	var rawJson map[string]json.RawMessage
+	err = json.Unmarshal(bytes, &rawJson)
+	if err != nil {
+		return nil, ErrInvalidSurrealResponse{Cause: err}
 	}
 
-	return &response, nil
+	idBytes, ok := rawJson["id"]
+	if !ok {
+		return nil, ErrInvalidSurrealResponse{}
+	}
+	idBytesLen := len(idBytes)
+	if idBytesLen < 2 {
+		return nil, ErrInvalidSurrealResponse{}
+	}
+	id := string(idBytes[1:(idBytesLen - 1)])
+
+	var result []byte
+	result, _ = rawJson["result"]
+
+	var rpcErr *RPCError
+	rpcErrBytes, errOccurred := rawJson["error"]
+	if errOccurred {
+		var errJson RPCError
+		err = json.Unmarshal(rpcErrBytes, &errJson)
+		if err != nil {
+			return nil, ErrInvalidSurrealResponse{Cause: err}
+		}
+		rpcErr = &errJson
+	}
+
+	return &RawRPCResponse{
+		ID:     id,
+		Error:  rpcErr,
+		Result: result,
+	}, nil
 }
 
 func (socket *WS) write(v interface{}) (err error) {
@@ -292,7 +316,6 @@ func (socket *WS) initialise() {
 			case <-socket.quit:
 				break
 			case res := <-socket.recv:
-
 				switch {
 				case res.Error == nil:
 					socket.done(res.ID, nil, res.Result)

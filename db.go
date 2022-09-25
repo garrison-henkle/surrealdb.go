@@ -2,6 +2,7 @@ package surrealdb
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -21,11 +22,108 @@ func New(url string) (*DB, error) {
 }
 
 // --------------------------------------------------
+
+type SurrealWSResult struct {
+	Result []byte
+	Single bool
+	Error  error
+}
+
+type SurrealWSRawResult struct {
+	Result []byte
+	Error  error
+}
+
+func (r SurrealWSResult) Unmarshal(v interface{}) (bool, error) {
+	if r.Error != nil {
+		fmt.Println("unmarshal error")
+		return false, r.Error
+	}
+
+	resultLength := len(r.Result)
+
+	//check for empty result
+	if resultLength-2 <= 0 {
+		return false, nil
+	}
+
+	var jsonBytes []byte
+	if !r.Single && isSlice(v) {
+		jsonBytes = r.Result
+	} else {
+		jsonBytes = r.Result[1:(resultLength - 1)]
+	}
+	err := json.Unmarshal(jsonBytes, v)
+	fmt.Println("raw bytes", string(jsonBytes))
+	if err != nil {
+		return false, ErrInvalidSurrealResponse{Cause: err}
+	}
+	return true, nil
+}
+
+const LeftBracket = 91
+
+var ErrUnexpectedSlice = errors.New("tried to unmarshal slice data into a non-slice container")
+
+func (r SurrealWSRawResult) UnmarshalRaw(v interface{}) (bool, error) {
+	if r.Error != nil {
+		return false, r.Error
+	}
+
+	fmt.Println("raw json:", string(r.Result))
+
+	var rawJson map[string]json.RawMessage
+	err := json.Unmarshal(r.Result, &rawJson)
+
+	if err != nil {
+		//todo find a better way of capturing array results or at the very least capture when the error is
+		var rawJsons []map[string]json.RawMessage
+		err := json.Unmarshal(r.Result, &rawJsons)
+		return false, ErrInvalidSurrealResponse{Cause: err}
+	}
+
+	rpcErrBytes, errOccurred := rawJson["error"]
+	if errOccurred {
+		var rpcErr RPCError
+		err = json.Unmarshal(rpcErrBytes, &rpcErr)
+		if err != nil {
+			return false, ErrInvalidSurrealResponse{Cause: err}
+		}
+		return false, &rpcErr
+	}
+
+	var result []byte
+	result, ok := rawJson["result"]
+	if !ok {
+		return false, ErrInvalidSurrealResponse{}
+	}
+	resultLength := len(result)
+
+	//check for empty result
+	if (resultLength - 2) <= 0 {
+		return false, nil
+	}
+
+	var jsonBytes []byte
+	if isSlice(v) {
+		jsonBytes = result
+	} else {
+		jsonBytes = result[1:(resultLength - 1)]
+	}
+	err = json.Unmarshal(jsonBytes, v)
+	if err != nil {
+		fmt.Println(3)
+		return false, ErrInvalidSurrealResponse{Cause: err}
+	}
+	return true, nil
+}
+
+// --------------------------------------------------
 // Public methods
 // --------------------------------------------------
 
 // Close closes the underlying WebSocket connection.
-func (database *DB) Close() error{
+func (database *DB) Close() error {
 	return database.ws.Close()
 }
 
@@ -33,87 +131,78 @@ func (database *DB) Close() error{
 
 // Use is a method to select the namespace and table to use.
 func (database *DB) Use(ns string, db string) (err error) {
-	_, err = database.send("use", nil, ns, db)
-	return err
+	return database.send("use", ns, db).Error
 }
 
 func (database *DB) Info() (err error) {
-	_, err = database.send("info", nil)
-	return err
+	return database.send("info").Error
 }
 
 // Signup is a helper method for signing up a new user.
 func (database *DB) Signup(vars interface{}) (err error) {
-	_, err = database.send("signup", nil, vars)
-	return err
+	return database.send("signup", vars).Error
 }
 
 // Signin is a helper method for signing in a user.
 func (database *DB) Signin(vars interface{}) (err error) {
-	_, err = database.send("signin", nil, vars)
-	return err
+	return database.send("signin", vars).Error
 }
 
 func (database *DB) Invalidate() (err error) {
-	_, err = database.send("invalidate", nil)
-	return err
+	return database.send("invalidate").Error
 }
 
 func (database *DB) Authenticate(token string) (err error) {
-	_, err = database.send("authenticate", nil, token)
-	return err
+	return database.send("authenticate", token).Error
 }
 
 // --------------------------------------------------
 
 func (database *DB) Live(table string) (err error) {
-	_, err = database.send("live", nil, table)
-	return err
+	return database.send("live", table).Error
 }
 
 func (database *DB) Kill(query string) (err error) {
-	_, err = database.send("kill", nil, query)
-	return err
+	return database.send("kill", query).Error
 }
 
 func (database *DB) Let(key string, val interface{}) (err error) {
-	_, err = database.send("let", nil, key, val)
-	return err
+	return database.send("let", key, val).Error
 }
 
 // Query is a convenient method for sending a query to the database.
-func (database *DB) Query(sql string, response interface{}, vars interface{}) (bool, error) {
-	return database.send("query", response, sql, vars)
+func (database *DB) Query(sql string, vars interface{}) *SurrealWSRawResult {
+	return database.sendRaw("query", sql, vars)
 }
 
 // Select a table or record from the database.
-func (database *DB) Select(what string, response interface{}) (bool, error) {
-	return database.send("select", response, what)
+func (database *DB) Select(what string) *SurrealWSResult {
+	return database.send("select", what)
 }
 
 // Create a table or record in the database like a POST request.
-func (database *DB) Create(thing string, data interface{}, response interface{}) (bool, error){
-	return database.send("create", response, thing, data)
+func (database *DB) Create(thing string, data interface{}) *SurrealWSResult {
+	return database.send("create", thing, data)
 }
 
 // Update a table or record in the database like a PUT request.
-func (database *DB) Update(what string, data interface{}, response interface{}) (bool, error) {
-	return database.send("update", response, what, data)
+func (database *DB) Update(what string, data interface{}) *SurrealWSResult {
+	return database.send("update", what, data)
 }
 
 // Change a table or record in the database like a PATCH request.
-func (database *DB) Change(what string, data interface{}, response interface{}) (bool, error) {
-	return database.send("change", response, what, data)
+func (database *DB) Change(what string, data interface{}) *SurrealWSResult {
+	return database.send("change", what, data)
 }
 
 // Modify applies a series of JSONPatches to a table or record.
-func (database *DB) Modify(what string, data []Patch, response interface{}) (bool, error) {
-	return database.send("modify", response, what, data)
+func (database *DB) Modify(what string, data []Patch) *SurrealWSResult {
+	return database.send("modify", what, data)
 }
 
 // Delete a table or a row from the database like a DELETE request.
-func (database *DB) Delete(what string, response interface{}) (bool, error) {
-	return database.send("delete", response, what)
+func (database *DB) Delete(what string) error {
+	return database.send("delete", what).Error
 }
 
 // --------------------------------------------------
@@ -121,106 +210,47 @@ func (database *DB) Delete(what string, response interface{}) (bool, error) {
 // --------------------------------------------------
 
 // send is a helper method for sending a query to the database.
-func (database *DB) send(method string, container interface{}, params ...interface{}) (bool, error) {
-
-	// generate an id for the action, this is used to distinguish its response
-	id := xid(16)
-	// chn: the channel where the server response will arrive, err: the channel where errors will come
-	chn, err := database.ws.Once(id, method)
-	// here we send the args through our websocket connection
-	database.ws.Send(id, method, params)
-
+func (database *DB) send(method string, params ...interface{}) *SurrealWSResult {
+	response, err := sendMessage(database.ws, method, params)
 	for {
 		select {
 		default:
 		case e := <-err:
-			return false, e
-		case r := <-chn:
-			switch method {
-			case "delete":
-				return true, nil
-			case "query":
-				return database.unmarshalRaw(r, container)
-			case "select":
-				return database.unmarshal(params, r, container)
-			case "create":
-				return database.unmarshal(params, r, container)
-			case "update":
-				return database.unmarshal(params, r, container)
-			case "change":
-				return database.unmarshal(params, r, container)
-			case "modify":
-				return database.unmarshal(params, r, container)
-			default:
-				return true, nil
+			return &SurrealWSResult{Error: e}
+		case result := <-response:
+			arg, ok := params[0].(string)
+			singleRecordRequested := ok && strings.Contains(arg, ":")
+			return &SurrealWSResult{
+				Result: result,
+				Single: singleRecordRequested,
 			}
 		}
 	}
 }
 
-const rightBracket = 93
-
-func getLastResultIndex(result []byte) (bool, int) {
-	resultLength := len(result)
-	var endIndex int
-	for endIndex = resultLength - 2; endIndex >= 0; endIndex-- {
-		if result[endIndex] == rightBracket {
-			break
+func (database *DB) sendRaw(method string, params ...interface{}) *SurrealWSRawResult {
+	response, err := sendMessage(database.ws, method, params)
+	for {
+		select {
+		default:
+		case e := <-err:
+			return &SurrealWSRawResult{Error: e}
+		case result := <-response:
+			return &SurrealWSRawResult{
+				Result: result,
+			}
 		}
 	}
-	if endIndex == 0{
-		return false, 0
-	}
-	return true, endIndex
 }
 
-func (database *DB) unmarshalRaw(result []byte, container interface{}) (bool, error){
-	//first 11 characters are '[{"result":', so start on character 12 (index 11)
-	startIndex := 11
-	ok, endIndex := getLastResultIndex(result)
-
-	//check for empty result
-	if !ok || endIndex - startIndex - 1 <= 0 {
-		return false, nil
-	}
-
-	var jsonBytes []byte
-	var err error
-	if isSlice(container){
-		jsonBytes = result[startIndex:(endIndex + 1)]
-	} else{
-		jsonBytes = result[(startIndex + 1):endIndex]
-	}
-	err = json.Unmarshal(jsonBytes, container)
-	if err != nil{
-		return false, err
-	}
-	return true, nil
-}
-
-// resp is a helper method for parsing the response from a query.
-func (database *DB) unmarshal(params []interface{}, result []byte, container interface{}) (bool, error) {
-	resultLength := len(result)
-
-	//check for empty result
-	if resultLength - 2 <= 0 {
-		return false, nil
-	}
-
-	arg, ok := params[0].(string)
-	singleRecordRequested := ok && strings.Contains(arg, ":")
-
-	var jsonBytes []byte
-	if !singleRecordRequested && isSlice(container){
-		jsonBytes = result
-	} else{
-		jsonBytes = result[1:(resultLength - 1)]
-	}
-	err := json.Unmarshal(jsonBytes, container)
-	if err != nil{
-		return false, err
-	}
-	return true, nil
+func sendMessage(ws *WS, method string, params []interface{}) (responseChannel <-chan []byte, errorChannel <-chan error) {
+	// generate an id for the action, this is used to distinguish its response
+	id := xid(16)
+	// chn: the channel where the server response will arrive, err: the channel where errors will come
+	responseChannel, errorChannel = ws.Once(id, method)
+	// here we send the args through our websocket connection
+	ws.Send(id, method, params)
+	return responseChannel, errorChannel
 }
 
 func isSlice(possibleSlice interface{}) bool {
