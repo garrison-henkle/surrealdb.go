@@ -160,36 +160,4 @@ func main(){
 	} else{
 		fmt.Println("user 2:", user2)
 	}
-
-
-	////fmt.Println("update data:", string(data.([]byte)))
-	//
-	//_, err = db.Delete("testUser1:jimmy")
-	//
-	//data, err := db.Query("select * from testUser1 where name = 'jimbo'", nil)
-	//if err != nil{
-	//	panic(err)
-	//}
-	//fmt.Println("final data 1: ", string(data.([]byte)))
-	//
-	//data, err = db.Select("testUser1")
-	//dataBytes := data.([]byte)
-	//fmt.Println("final data 2: ", string(dataBytes))
-	//var testUser1s []testUser
-	//err = json.Unmarshal(dataBytes, &testUser1s)
-	//if err != nil{
-	//	panic(err)
-	//} else{
-	//	fmt.Println(testUser1s)
-	//}
-	//fmt.Println()
-	//
-	//data, err = db.Select("testUsr")
-	//fmt.Println("final data 3: ", string(data.([]byte)))
-	//
-	//data, err = db.Query("selec t* from testUsr where name = 'jimbo'", nil)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//fmt.Println("final data 4: ", data)
 }

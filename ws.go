@@ -191,18 +191,6 @@ func (socket *WS) read() (*RawRPCResponse, error) {
 		return nil, err
 	}
 
-	//{"id":"e081647f2eb3abd9","result":""}
-	//0123456789012345678901234567890123456
-	//7-23 is id, 34-(len-1) is the the result
-
-	//{"id":"37dfcaeca4a44d39","error":{"code":-32000,"message":"There was a problem with the database: Parse error on line 1 at character 0 when parsing 'selec t* from testUsr where name = 'jimbo''"}}
-	//0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
-	//0         1         2         3         4         5         6
-	//33-(len-1) is the error object
-
-	//{"id":"533c59eb86e8f01c","result":[{"id":"testUser1:bqsg4vooolgye1jxgjc2","name":"jimbo"},{"id":"testUser1:skohu12qsxjbw4tamvy3","name":"jim"}]}
-	//0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890
-
 	msgSize := len(bytes)
 	id := string(bytes[7:23])
 	response := RawRPCResponse{ ID: id }
