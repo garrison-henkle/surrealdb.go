@@ -17,7 +17,7 @@ type testUser struct {
 }
 
 // an example test for creating a new entry in surrealdb
-func ExampleNew() {
+func TestNew(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -27,12 +27,15 @@ func ExampleNew() {
 		panic(err)
 	}
 
-	defer db.Close()
+	//wrap in closure to avoid unhandled error warnings
+	defer func(db *surrealdb.DB) {
+		_ = db.Close()
+	}(db)
 
 	// Output:
 }
 
-func ExampleDB_Delete() {
+func TestDB_Delete(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -40,9 +43,12 @@ func ExampleDB_Delete() {
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
+	//wrap in closure to avoid unhandled error warnings
+	defer func(db *surrealdb.DB) {
+		_ = db.Close()
+	}(db)
 
-	_, err = db.Signin(ctx, surrealdb.UserInfo{
+	err = db.Signin(ctx, surrealdb.UserInfo{
 		User:     "root",
 		Password: "root",
 	})
@@ -51,26 +57,20 @@ func ExampleDB_Delete() {
 		panic(err)
 	}
 
-	_, err = db.Use(ctx, "test", "test")
+	err = db.Use(ctx, "test", "test")
 
 	if err != nil {
 		panic(err)
 	}
 
-	userData, err := db.Create(ctx, "users", testUser{
+	var user testUser
+	err = db.Create(ctx, "users", testUser{
 		Username: "johnny",
 		Password: "123",
-	})
-
-	// unmarshal the data into a user struct
-	var user testUser
-	err = surrealdb.Unmarshal(userData, &user)
-	if err != nil {
-		panic(err)
-	}
+	}).Unmarshal(&user)
 
 	// Delete the users...
-	_, err = db.Delete(ctx, "users")
+	err = db.Delete(ctx, "users")
 
 	if err != nil {
 		panic(err)
@@ -79,7 +79,7 @@ func ExampleDB_Delete() {
 	// Output:
 }
 
-func ExampleDB_Create() {
+func TestDB_Create(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -89,9 +89,12 @@ func ExampleDB_Create() {
 		panic(err)
 	}
 
-	defer db.Close()
+	//wrap in closure to avoid unhandled error warnings
+	defer func(db *surrealdb.DB) {
+		_ = db.Close()
+	}(db)
 
-	signin, err := db.Signin(ctx, surrealdb.UserInfo{
+	err = db.Signin(ctx, surrealdb.UserInfo{
 		User:     "root",
 		Password: "root",
 	})
@@ -100,38 +103,40 @@ func ExampleDB_Create() {
 		panic(err)
 	}
 
-	_, err = db.Use(ctx, "test", "test")
+	err = db.Use(ctx, "test", "test")
 
-	if err != nil || signin == nil {
-		panic(err)
-	}
-
-	userMap, err := db.Create(ctx, "users", map[string]interface{}{
-		"username": "john",
-		"password": "123",
-	})
-
-	if err != nil || userMap == nil {
-		panic(err)
-	}
-
-	userData, err := db.Create(ctx, "users", testUser{
-		Username: "johnny",
-		Password: "123",
-	})
-
-	var user testUser
-	err = surrealdb.Unmarshal(userData, &user)
+	//todo, there was a check to see if signin was null here before the changes.
+	// Maybe need a check for 'len(SurrealWSResult.Result) == 0' in the methods that just return error
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println(user.Username)
+	var john testUser
+	err = db.Create(ctx, "users", map[string]interface{}{
+		"username": "john",
+		"password": "123",
+	}).Unmarshal(&john)
+
+	if err != nil {
+		panic(err)
+	}
+
+	var johnny testUser
+	err = db.Create(ctx, "users", testUser{
+		Username: "johnny",
+		Password: "123",
+	}).Unmarshal(&johnny)
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(johnny.Username)
 
 	// Output: johnny
 }
 
-func ExampleDB_Select() {
+func TestDB_Select(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -140,9 +145,12 @@ func ExampleDB_Select() {
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
+	//wrap in closure to avoid unhandled error warnings
+	defer func(db *surrealdb.DB) {
+		_ = db.Close()
+	}(db)
 
-	_, err = db.Signin(ctx, surrealdb.UserInfo{
+	err = db.Signin(ctx, surrealdb.UserInfo{
 		User:     "root",
 		Password: "root",
 	})
@@ -151,23 +159,23 @@ func ExampleDB_Select() {
 		panic(err)
 	}
 
-	_, err = db.Use(ctx, "test", "test")
+	err = db.Use(ctx, "test", "test")
 
 	if err != nil {
 		panic(err)
 	}
 
-	_, err = db.Create(ctx, "users", testUser{
+	err = db.Create(ctx, "users", testUser{
 		Username: "johnnyjohn",
 		Password: "123",
-	})
-
-	userData, err := db.Select(ctx, "users")
+	}).Error
 
 	// unmarshal the data into a user slice
 	var users []testUser
-	log.Print(userData)
-	err = surrealdb.Unmarshal(userData, &users)
+	response := db.Select(ctx, "users")
+	log.Print(response.Result)
+
+	err = response.Unmarshal(&users)
 	if err != nil {
 		panic(err)
 	}
@@ -181,7 +189,7 @@ func ExampleDB_Select() {
 	// Output: johnnyjohn
 }
 
-func ExampleDB_Update() {
+func TestDB_Update(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -189,9 +197,12 @@ func ExampleDB_Update() {
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
+	//wrap in closure to avoid unhandled error warnings
+	defer func(db *surrealdb.DB) {
+		_ = db.Close()
+	}(db)
 
-	_, err = db.Signin(ctx, surrealdb.UserInfo{
+	err = db.Signin(ctx, surrealdb.UserInfo{
 		User:     "root",
 		Password: "root",
 	})
@@ -200,36 +211,32 @@ func ExampleDB_Update() {
 		panic(err)
 	}
 
-	_, err = db.Use(ctx, "test", "test")
+	err = db.Use(ctx, "test", "test")
 
 	if err != nil {
 		panic(err)
 	}
 
-	userData, err := db.Create(ctx, "users", testUser{
-		Username: "johnny",
-		Password: "123",
-	})
-
 	// unmarshal the data into a user struct
 	var user testUser
-	err = surrealdb.Unmarshal(userData, &testUser{})
+	err = db.Create(ctx, "users", testUser{
+		Username: "johnny",
+		Password: "123",
+	}).Unmarshal(&user)
+
 	if err != nil {
 		panic(err)
 	}
 
 	user.Password = "456"
 
-	// Update the user
-	userData, err = db.Update(ctx, "users", &user)
+	// Update the user and unmarshal the data into a user struct
+	var updatedUser []testUser
+	err = db.Update(ctx, "users", &user).Unmarshal(&updatedUser)
 
 	if err != nil {
 		panic(err)
 	}
-
-	// unmarshal the data into a user struct
-	var updatedUser []testUser
-	err = surrealdb.Unmarshal(userData, &updatedUser)
 
 	if err != nil {
 		panic(err)
@@ -249,9 +256,12 @@ func TestUnmarshalRaw(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
+	//wrap in closure to avoid unhandled error warnings
+	defer func(db *surrealdb.DB) {
+		_ = db.Close()
+	}(db)
 
-	_, err = db.Signin(ctx, surrealdb.UserInfo{
+	err = db.Signin(ctx, surrealdb.UserInfo{
 		User:     "root",
 		Password: "root",
 	})
@@ -260,13 +270,13 @@ func TestUnmarshalRaw(t *testing.T) {
 		panic(err)
 	}
 
-	_, err = db.Use(ctx, "test", "test")
+	err = db.Use(ctx, "test", "test")
 
 	if err != nil {
 		panic(err)
 	}
 
-	_, err = db.Delete(ctx, "users")
+	err = db.Delete(ctx, "users")
 	if err != nil {
 		panic(err)
 	}
@@ -276,44 +286,36 @@ func TestUnmarshalRaw(t *testing.T) {
 
 	//create test user with raw SurrealQL and unmarshal
 
-	userData, err := db.Query(ctx, "create users:johnny set Username = $user, Password = $pass", map[string]interface{}{
+	var user testUser
+	err = db.Query(ctx, "create users:johnny set Username = $user, Password = $pass", map[string]interface{}{
 		"user": username,
 		"pass": password,
-	})
+	}).Unmarshal(&user)
 	if err != nil {
 		panic(err)
 	}
 
-	var user testUser
-	ok, err := surrealdb.UnmarshalRaw(userData, &user)
 	if err != nil {
 		panic(err)
 	}
-	if !ok || user.Username != username || user.Password != password {
+	if user.Username != username || user.Password != password {
 		panic("response does not match the request")
 	}
 
 	//send query with empty result and unmarshal
 
-	userData, err = db.Query(ctx, "select * from users where id = $id", map[string]interface{}{
+	var emptyUser testUser
+	err = db.Query(ctx, "select * from users where id = $id", map[string]interface{}{
 		"id": "users:jim",
-	})
-	if err != nil {
+	}).Unmarshal(&emptyUser)
+	if err == nil || err != surrealdb.ErrNoResult {
 		panic(err)
-	}
-
-	ok, err = surrealdb.UnmarshalRaw(userData, &user)
-	if err != nil {
-		panic(err)
-	}
-	if ok {
-		panic("select should return an empty result")
 	}
 
 	// Output:
 }
 
-func ExampleDB_Modify() {
+func TestDB_Modify(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -321,18 +323,23 @@ func ExampleDB_Modify() {
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
+	//wrap in closure to avoid unhandled error warnings
+	defer func(db *surrealdb.DB) {
+		_ = db.Close()
+	}(db)
 
-	_, err = db.Signin(ctx, surrealdb.UserInfo{
+	err = db.Signin(ctx, surrealdb.UserInfo{
 		User:     "root",
 		Password: "root",
 	})
-	_, err = db.Use(ctx, "test", "test")
+	err = db.Use(ctx, "test", "test")
 
-	_, err = db.Create(ctx, "users:999", map[string]interface{}{
+	_ = db.Delete(ctx, "users")
+
+	err = db.Create(ctx, "users:999", map[string]interface{}{
 		"username": "john999",
 		"password": "123",
-	})
+	}).Error
 	if err != nil {
 		panic(err)
 	}
@@ -343,18 +350,19 @@ func ExampleDB_Modify() {
 	}
 
 	// Update the user
-	_, err = db.Modify(ctx, "users:999", patches)
+	err = db.Modify(ctx, "users:999", patches).Error
 	if err != nil {
 		panic(err)
 	}
 
-	user2, err := db.Select(ctx, "users:999")
+	var user map[string]interface{}
+	err = db.Select(ctx, "users:999").Unmarshal(&user)
 	if err != nil {
 		panic(err)
 	}
 
 	// // TODO: this needs to simplified for the end user somehow
-	fmt.Println((user2).(map[string]interface{})["age"])
+	fmt.Println(user["age"])
 	//
 	// Output: 44
 }

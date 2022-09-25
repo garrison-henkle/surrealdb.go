@@ -6,7 +6,8 @@ import (
 )
 
 var (
-	ErrNoResult = errors.New("query returned no results")
+	ErrNoResult      = errors.New("query returned no results")
+	ErrBlankResponse = errors.New("response was blank")
 )
 
 type ErrInvalidSurrealResponse struct {
