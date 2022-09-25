@@ -1,6 +1,7 @@
 package surrealdb
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -12,8 +13,8 @@ type DB struct {
 }
 
 // New Creates a new DB instance given a WebSocket URL.
-func New(url string) (*DB, error) {
-	ws, err := NewWebsocket(url)
+func New(ctx context.Context, url string) (*DB, error) {
+	ws, err := NewWebsocket(ctx, url)
 	if err != nil {
 		return nil, err
 	}
@@ -113,86 +114,86 @@ func (r SurrealWSRawResult) Unmarshal(v interface{}) error {
 // --------------------------------------------------
 
 // Close closes the underlying WebSocket connection.
-func (database *DB) Close() error {
-	return database.ws.Close()
+func (db *DB) Close() error {
+	return db.ws.Close()
 }
 
 // --------------------------------------------------
 
 // Use is a method to select the namespace and table to use.
-func (database *DB) Use(ns string, db string) (err error) {
-	return database.send("use", ns, db).Error
+func (db *DB) Use(ctx context.Context, ns string, dbname string) error {
+	return db.send(ctx, "use", ns, dbname).Error
 }
 
-func (database *DB) Info() (err error) {
-	return database.send("info").Error
+func (db *DB) Info(ctx context.Context) error {
+	return db.send(ctx, "info").Error
 }
 
 // Signup is a helper method for signing up a new user.
-func (database *DB) Signup(vars interface{}) (err error) {
-	return database.send("signup", vars).Error
+func (db *DB) Signup(ctx context.Context, vars interface{}) error {
+	return db.send(ctx, "signup", vars).Error
 }
 
 // Signin is a helper method for signing in a user.
-func (database *DB) Signin(vars interface{}) (err error) {
-	return database.send("signin", vars).Error
+func (db *DB) Signin(ctx context.Context, vars UserInfo) error {
+	return db.send(ctx, "signin", vars).Error
 }
 
-func (database *DB) Invalidate() (err error) {
-	return database.send("invalidate").Error
+func (db *DB) Invalidate(ctx context.Context) error {
+	return db.send(ctx, "invalidate").Error
 }
 
-func (database *DB) Authenticate(token string) (err error) {
-	return database.send("authenticate", token).Error
+func (db *DB) Authenticate(ctx context.Context, token string) error {
+	return db.send(ctx, "authenticate", token).Error
 }
 
 // --------------------------------------------------
 
-func (database *DB) Live(table string) (err error) {
-	return database.send("live", table).Error
+func (db *DB) Live(ctx context.Context, table string) error {
+	return db.send(ctx, "live", table).Error
 }
 
-func (database *DB) Kill(query string) (err error) {
-	return database.send("kill", query).Error
+func (db *DB) Kill(ctx context.Context, query string) error {
+	return db.send(ctx, "kill", query).Error
 }
 
-func (database *DB) Let(key string, val interface{}) (err error) {
-	return database.send("let", key, val).Error
+func (db *DB) Let(ctx context.Context, key string, val interface{}) error {
+	return db.send(ctx, "let", key, val).Error
 }
 
 // Query is a convenient method for sending a query to the database.
-func (database *DB) Query(sql string, vars interface{}) *SurrealWSRawResult {
-	return database.sendRaw("query", sql, vars)
+func (db *DB) Query(ctx context.Context, sql string, vars interface{}) *SurrealWSRawResult {
+	return db.sendRaw(ctx, "query", sql, vars)
 }
 
 // Select a table or record from the database.
-func (database *DB) Select(what string) *SurrealWSResult {
-	return database.send("select", what)
+func (db *DB) Select(ctx context.Context, what string) *SurrealWSResult {
+	return db.send(ctx, "select", what)
 }
 
 // Create a table or record in the database like a POST request.
-func (database *DB) Create(thing string, data interface{}) *SurrealWSResult {
-	return database.send("create", thing, data)
+func (db *DB) Create(ctx context.Context, thing string, data interface{}) *SurrealWSResult {
+	return db.send(ctx, "create", thing, data)
 }
 
 // Update a table or record in the database like a PUT request.
-func (database *DB) Update(what string, data interface{}) *SurrealWSResult {
-	return database.send("update", what, data)
+func (db *DB) Update(ctx context.Context, what string, data interface{}) *SurrealWSResult {
+	return db.send(ctx, "update", what, data)
 }
 
 // Change a table or record in the database like a PATCH request.
-func (database *DB) Change(what string, data interface{}) *SurrealWSResult {
-	return database.send("change", what, data)
+func (db *DB) Change(ctx context.Context, what string, data interface{}) *SurrealWSResult {
+	return db.send(ctx, "change", what, data)
 }
 
 // Modify applies a series of JSONPatches to a table or record.
-func (database *DB) Modify(what string, data []Patch) *SurrealWSResult {
-	return database.send("modify", what, data)
+func (db *DB) Modify(ctx context.Context, what string, data []Patch) *SurrealWSResult {
+	return db.send(ctx, "modify", what, data)
 }
 
 // Delete a table or a row from the database like a DELETE request.
-func (database *DB) Delete(what string) error {
-	return database.send("delete", what).Error
+func (db *DB) Delete(ctx context.Context, what string) error {
+	return db.send(ctx, "delete", what).Error
 }
 
 // --------------------------------------------------
@@ -200,13 +201,12 @@ func (database *DB) Delete(what string) error {
 // --------------------------------------------------
 
 // send is a helper method for sending a query to the database.
-func (database *DB) send(method string, params ...interface{}) *SurrealWSResult {
+func (database *DB) send(ctx context.Context, method string, params ...interface{}) *SurrealWSResult {
 	response, err := sendMessage(database.ws, method, params)
 	for {
 		select {
-		default:
-		case e := <-err:
-			return &SurrealWSResult{Error: e}
+		case <-ctx.Done():
+			return &SurrealWSResult{Error: ctx.Err()}
 		case result := <-response:
 			arg, ok := params[0].(string)
 			singleRecordRequested := ok && strings.Contains(arg, ":")
@@ -244,15 +244,10 @@ func sendMessage(ws *WS, method string, params []interface{}) (responseChannel <
 }
 
 func isSlice(possibleSlice interface{}) bool {
-	slice := false
-
-	switch v := possibleSlice.(type) {
-	default:
-		res := fmt.Sprintf("%s", v)
-		if res == "[]" || res == "&[]" || res == "*[]" {
-			slice = true
-		}
+	res := fmt.Sprintf("%s", possibleSlice)
+	if res == "[]" || res == "&[]" || res == "*[]" {
+		return true
 	}
 
-	return slice
+	return false
 }
