@@ -2,4 +2,7 @@ module github.com/surrealdb/surrealdb.go
 
 go 1.13
 
-require github.com/gorilla/websocket v1.5.0
+require (
+	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/gorilla/websocket v1.5.0
+)

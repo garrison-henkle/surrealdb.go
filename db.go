@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/buger/jsonparser"
 	"strings"
 )
 
@@ -24,14 +25,28 @@ func New(ctx context.Context, url string) (*DB, error) {
 // --------------------------------------------------
 
 type SurrealWSResult struct {
-	Result []byte
-	Single bool
-	Error  error
+	Result        []byte
+	SingleRequest bool
+	Error         error
+}
+
+func (r SurrealWSResult) String() string {
+	if r.Error != nil {
+		return fmt.Sprintf("SurrealWSResult(error=%s)", r.Error.Error())
+	}
+	return fmt.Sprintf("SurrealWSResult(data=%s, single=%v)", r.Result, r.SingleRequest)
 }
 
 type SurrealWSRawResult struct {
 	Result []byte
 	Error  error
+}
+
+func (r SurrealWSRawResult) String() string {
+	if r.Error != nil {
+		return fmt.Sprintf("SurrealWSRawResult(error=%s)", r.Error.Error())
+	}
+	return fmt.Sprintf("SurrealWSRawResult(data=%s)", r.Result)
 }
 
 func (r SurrealWSResult) Unmarshal(v interface{}) error {
@@ -47,51 +62,47 @@ func (r SurrealWSResult) Unmarshal(v interface{}) error {
 	}
 
 	var jsonBytes []byte
-	if !r.Single && isSlice(v) {
+	if !r.SingleRequest && isSlice(v) {
 		jsonBytes = r.Result
 	} else {
 		jsonBytes = r.Result[1:(resultLength - 1)]
 	}
 	err := json.Unmarshal(jsonBytes, v)
 	if err != nil {
-		return ErrInvalidSurrealResponse{Cause: err}
+		return ErrFailedUnmarshal{Cause: err}
 	}
 	return nil
 }
 
+type MultiQueryError struct {
+	QueryNumber int
+	Error       error
+}
+
+// Unmarshal unmarshals a single response returned by a raw query
 func (r SurrealWSRawResult) Unmarshal(v interface{}) error {
 	if r.Error != nil {
 		return r.Error
 	}
 
-	responseLength := len(r.Result)
-	if responseLength <= 2 {
-		return ErrInvalidSurrealResponse{}
-	}
-	var rawJson map[string]json.RawMessage
-	err := json.Unmarshal(r.Result[1:(responseLength-1)], &rawJson)
+	result, _, _, err := jsonparser.Get(r.Result, "result")
 	if err != nil {
 		return ErrInvalidSurrealResponse{Cause: err}
 	}
 
-	rpcErrBytes, errOccurred := rawJson["error"]
-	if errOccurred {
-		var rpcErr RPCError
-		err = json.Unmarshal(rpcErrBytes, &rpcErr)
-		if err != nil {
-			return ErrInvalidSurrealResponse{Cause: err}
-		}
-		return &rpcErr
+	//check for empty result
+	resultLength := len(result)
+	if (resultLength - 2) <= 0 {
+		return ErrNoResult
 	}
 
-	var result []byte
-	result, ok := rawJson["result"]
-	if !ok {
-		return ErrInvalidSurrealResponse{}
+	result, _, _, err = jsonparser.Get(result[1:(resultLength-1)], "result")
+	if err != nil {
+		return ErrInvalidSurrealResponse{Cause: err}
 	}
-	resultLength := len(result)
 
 	//check for empty result
+	resultLength = len(result)
 	if (resultLength - 2) <= 0 {
 		return ErrNoResult
 	}
@@ -104,7 +115,106 @@ func (r SurrealWSRawResult) Unmarshal(v interface{}) error {
 	}
 	err = json.Unmarshal(jsonBytes, v)
 	if err != nil {
-		return ErrUnableToUnmarshal{Cause: err}
+		return ErrFailedUnmarshal{Cause: err}
+	}
+	return nil
+}
+
+// UnmarshalMultiQuery unmarshals the response returned by queries sent in bulk into the provided containers.
+func (r SurrealWSRawResult) UnmarshalMultiQuery(v ...interface{}) []MultiQueryError {
+	containerCount := len(v)
+	errorSlice := make([]MultiQueryError, 0)
+	if r.Error != nil {
+		errorSlice = append(errorSlice, MultiQueryError{
+			QueryNumber: -1,
+			Error:       r.Error,
+		})
+		return errorSlice
+	}
+
+	var jsonBytes []byte
+	var resultLength int
+	var queryNumber int
+	fatalErrorOccurred := false
+	_, err := jsonparser.ArrayEach(r.Result, func(result []byte, _ jsonparser.ValueType, _ int, err error) {
+		if fatalErrorOccurred {
+			return
+		}
+		if queryNumber >= containerCount {
+			errorSlice = append(errorSlice, MultiQueryError{
+				QueryNumber: -1,
+				Error:       ErrTooFewContainers,
+			})
+			fatalErrorOccurred = true
+			return
+		}
+
+		//check for empty result
+		resultLength = len(result)
+		if (resultLength - 2) <= 0 {
+			errorSlice = append(errorSlice, MultiQueryError{
+				QueryNumber: queryNumber,
+				Error:       ErrNoResult,
+			})
+			queryNumber++
+			return
+		}
+
+		result, _, _, err = jsonparser.Get(result, "result")
+		if err != nil {
+			errorSlice = append(errorSlice, MultiQueryError{
+				QueryNumber: queryNumber,
+				Error:       ErrInvalidSurrealResponse{Cause: err},
+			})
+			return
+		}
+
+		//check for empty result
+		resultLength = len(result)
+		if (resultLength - 2) <= 0 {
+			errorSlice = append(errorSlice, MultiQueryError{
+				QueryNumber: queryNumber,
+				Error:       ErrNoResult,
+			})
+			queryNumber++
+			return
+		}
+
+		if isSlice(v[queryNumber]) {
+			jsonBytes = result
+		} else {
+			jsonBytes = result[1:(resultLength - 1)]
+		}
+
+		err = json.Unmarshal(jsonBytes, v[queryNumber])
+		if err != nil {
+			errorSlice = append(errorSlice, MultiQueryError{
+				QueryNumber: queryNumber,
+				Error:       &ErrFailedUnmarshal{Cause: err},
+			})
+		}
+
+		queryNumber++
+	}, "result")
+
+	if err != nil {
+		errorSlice = append(errorSlice, MultiQueryError{
+			QueryNumber: -1,
+			Error:       ErrInvalidSurrealResponse{Cause: err},
+		})
+		return errorSlice
+	}
+
+	if queryNumber != containerCount {
+		errorSlice = append(errorSlice, MultiQueryError{
+			QueryNumber: -1,
+			Error:       ErrTooManyContainers,
+		})
+		return errorSlice
+	}
+
+	if len(errorSlice) != 0 {
+		return errorSlice
 	}
 	return nil
 }
@@ -208,12 +318,16 @@ func (db *DB) send(ctx context.Context, method string, params ...interface{}) *S
 		case <-ctx.Done():
 			return &SurrealWSResult{Error: ctx.Err()}
 		case r := <-response:
-			arg, ok := params[0].(string)
-			singleRecordRequested := ok && strings.Contains(arg, ":")
-			var result SurrealWSResult
-			result.Result = r.value
-			result.Error = r.err
-			result.Single = singleRecordRequested
+			resultBytes, err := parseResponse(r.Value)
+			result := SurrealWSResult{
+				Result: resultBytes,
+				Error:  err,
+			}
+			if err == nil {
+				arg, ok := params[0].(string)
+				singleRecordRequested := ok && strings.Contains(arg, ":")
+				result.SingleRequest = singleRecordRequested
+			}
 			return &result
 		}
 	}
@@ -227,12 +341,45 @@ func (db *DB) sendRaw(ctx context.Context, method string, params ...interface{})
 		case <-ctx.Done():
 			return &SurrealWSRawResult{Error: ctx.Err()}
 		case r := <-response:
-			var result SurrealWSRawResult
-			result.Result = r.value
-			result.Error = r.err
-			return &result
+			resultBytes, err := parseRawResponse(r.Value)
+			return &SurrealWSRawResult{
+				Result: resultBytes,
+				Error:  err,
+			}
 		}
 	}
+}
+
+func parseRawResponse(response []byte) ([]byte, error) {
+	data, _, _, err := jsonparser.Get(response, "error")
+	if err != nil {
+		return response, nil
+	}
+	var rpcErr RPCError
+	err = json.Unmarshal(data, &rpcErr)
+	if err != nil {
+		return nil, &ErrInvalidSurrealResponse{Cause: err}
+	}
+	return nil, &rpcErr
+}
+
+func parseResponse(response []byte) ([]byte, error) {
+	//try result first because it is more likely than an error
+	data, _, _, err := jsonparser.Get(response, "result")
+	if err == nil {
+		return data, nil
+	}
+
+	data, _, _, err = jsonparser.Get(response, "error")
+	if err != nil {
+		return nil, &ErrInvalidSurrealResponse{Cause: err}
+	}
+	var rpcErr RPCError
+	err = json.Unmarshal(data, &rpcErr)
+	if err != nil {
+		return nil, &ErrInvalidSurrealResponse{Cause: err}
+	}
+	return nil, &rpcErr
 }
 
 func sendMessage(ws *WS, method string, params []interface{}) (responseChannel <-chan responseValue) {
