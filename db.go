@@ -24,32 +24,7 @@ func New(ctx context.Context, url string) (*DB, error) {
 
 // --------------------------------------------------
 
-type SurrealWSResult struct {
-	Result        []byte
-	SingleRequest bool
-	Error         error
-}
-
-func (r SurrealWSResult) String() string {
-	if r.Error != nil {
-		return fmt.Sprintf("SurrealWSResult(error=%s)", r.Error.Error())
-	}
-	return fmt.Sprintf("SurrealWSResult(data=%s, single=%v)", r.Result, r.SingleRequest)
-}
-
-type SurrealWSRawResult struct {
-	Result []byte
-	Error  error
-}
-
-func (r SurrealWSRawResult) String() string {
-	if r.Error != nil {
-		return fmt.Sprintf("SurrealWSRawResult(error=%s)", r.Error.Error())
-	}
-	return fmt.Sprintf("SurrealWSRawResult(data=%s)", r.Result)
-}
-
-func (r SurrealWSResult) Unmarshal(v interface{}) error {
+func (r *SurrealWSResult) Unmarshal(v interface{}) error {
 	if r.Error != nil {
 		return r.Error
 	}
@@ -67,6 +42,7 @@ func (r SurrealWSResult) Unmarshal(v interface{}) error {
 	} else {
 		jsonBytes = r.Result[1:(resultLength - 1)]
 	}
+	//todo replace this with something faster
 	err := json.Unmarshal(jsonBytes, v)
 	if err != nil {
 		return ErrFailedUnmarshal{Cause: err}
@@ -74,13 +50,8 @@ func (r SurrealWSResult) Unmarshal(v interface{}) error {
 	return nil
 }
 
-type MultiQueryError struct {
-	QueryNumber int
-	Error       error
-}
-
 // Unmarshal unmarshals a single response returned by a raw query
-func (r SurrealWSRawResult) Unmarshal(v interface{}) error {
+func (r *SurrealWSRawResult) Unmarshal(v interface{}) error {
 	if r.Error != nil {
 		return r.Error
 	}
@@ -113,6 +84,7 @@ func (r SurrealWSRawResult) Unmarshal(v interface{}) error {
 	} else {
 		jsonBytes = result[1:(resultLength - 1)]
 	}
+	//todo replace this with something faster
 	err = json.Unmarshal(jsonBytes, v)
 	if err != nil {
 		return ErrFailedUnmarshal{Cause: err}
@@ -121,7 +93,7 @@ func (r SurrealWSRawResult) Unmarshal(v interface{}) error {
 }
 
 // UnmarshalMultiQuery unmarshals the response returned by queries sent in bulk into the provided containers.
-func (r SurrealWSRawResult) UnmarshalMultiQuery(v ...interface{}) []MultiQueryError {
+func (r *SurrealWSRawResult) UnmarshalMultiQuery(v ...interface{}) []MultiQueryError {
 	containerCount := len(v)
 	errorSlice := make([]MultiQueryError, 0)
 	if r.Error != nil {
@@ -186,6 +158,7 @@ func (r SurrealWSRawResult) UnmarshalMultiQuery(v ...interface{}) []MultiQueryEr
 			jsonBytes = result[1:(resultLength - 1)]
 		}
 
+		//todo replace this with something faster
 		err = json.Unmarshal(jsonBytes, v[queryNumber])
 		if err != nil {
 			errorSlice = append(errorSlice, MultiQueryError{
@@ -380,6 +353,11 @@ func parseResponse(response []byte) ([]byte, error) {
 		return nil, &ErrInvalidSurrealResponse{Cause: err}
 	}
 	return nil, &rpcErr
+}
+
+// {"id":"1","result":[[{"op":"add","path":"/name","value":"jim"},{"op":"add","path":"/id","value":1}]]}
+func parsePatchResponse() {
+	//todo
 }
 
 func sendMessage(ws *WS, method string, params []interface{}) (responseChannel <-chan responseValue) {

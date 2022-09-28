@@ -89,13 +89,21 @@ func main() {
 		fmt.Println("query 3:", user2)
 	}
 
-	var users2 []user
-	err = db.Query(ctx, "select * from user", nil).Unmarshal(&users2)
+	var users2a []user
+	err = db.Query(ctx, "select * from user", nil).Unmarshal(&users2a)
 	if err != nil {
 		_ = fmt.Errorf("UNEXPECTED RESULT: ")
-		fmt.Println("query 4 error:", err)
+		fmt.Println("query 4a error:", err)
 	} else {
-		fmt.Println("query 4:", users2)
+		fmt.Println("query 4b:", users2a)
+	}
+
+	users2b, err := surrealdb.QueryAs[[]user](ctx, db, "select * from user", nil)
+	if err != nil {
+		fmt.Println("query 4b error:", err)
+	} else {
+		_ = fmt.Errorf("UNEXPECTED RESULT: ")
+		fmt.Println("query 4b:", users2b)
 	}
 
 	var users3 []user
