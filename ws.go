@@ -28,7 +28,7 @@ type responseValue struct {
 	Value []byte
 }
 
-func NewWebsocket(ctx context.Context, url string) (*WS, error) {
+func NewWebsocket(ctx *context.Context, url string) (*WS, error) {
 	dialer := websocket.DefaultDialer
 	dialer.EnableCompression = true
 
@@ -45,7 +45,7 @@ func NewWebsocket(ctx context.Context, url string) (*WS, error) {
 	ws.emit.when = make(map[interface{}][]func([]byte))
 
 	// setup loops and channels
-	ws.initialise(ctx)
+	ws.initialise(*ctx)
 
 	return ws, nil
 

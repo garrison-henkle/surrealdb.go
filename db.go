@@ -14,7 +14,7 @@ type DB struct {
 }
 
 // New Creates a new DB instance given a WebSocket URL.
-func New(ctx context.Context, url string) (*DB, error) {
+func New(ctx *context.Context, url string) (*DB, error) {
 	ws, err := NewWebsocket(ctx, url)
 	if err != nil {
 		return nil, err
@@ -204,78 +204,78 @@ func (db *DB) Close() error {
 // --------------------------------------------------
 
 // Use is a method to select the namespace and table to use.
-func (db *DB) Use(ctx context.Context, ns string, dbname string) error {
+func (db *DB) Use(ctx *context.Context, ns string, dbname string) error {
 	return db.send(ctx, "use", ns, dbname).Error
 }
 
-func (db *DB) Info(ctx context.Context) error {
+func (db *DB) Info(ctx *context.Context) error {
 	return db.send(ctx, "info").Error
 }
 
 // Signup is a helper method for signing up a new user.
-func (db *DB) Signup(ctx context.Context, vars interface{}) error {
+func (db *DB) Signup(ctx *context.Context, vars interface{}) error {
 	return db.send(ctx, "signup", vars).Error
 }
 
 // Signin is a helper method for signing in a user.
-func (db *DB) Signin(ctx context.Context, vars UserInfo) error {
+func (db *DB) Signin(ctx *context.Context, vars UserInfo) error {
 	return db.send(ctx, "signin", vars).Error
 }
 
-func (db *DB) Invalidate(ctx context.Context) error {
+func (db *DB) Invalidate(ctx *context.Context) error {
 	return db.send(ctx, "invalidate").Error
 }
 
-func (db *DB) Authenticate(ctx context.Context, token string) error {
+func (db *DB) Authenticate(ctx *context.Context, token string) error {
 	return db.send(ctx, "authenticate", token).Error
 }
 
 // --------------------------------------------------
 
-func (db *DB) Live(ctx context.Context, table string) error {
+func (db *DB) Live(ctx *context.Context, table string) error {
 	return db.send(ctx, "live", table).Error
 }
 
-func (db *DB) Kill(ctx context.Context, query string) error {
+func (db *DB) Kill(ctx *context.Context, query string) error {
 	return db.send(ctx, "kill", query).Error
 }
 
-func (db *DB) Let(ctx context.Context, key string, val interface{}) error {
+func (db *DB) Let(ctx *context.Context, key string, val interface{}) error {
 	return db.send(ctx, "let", key, val).Error
 }
 
 // Query is a convenient method for sending a query to the database.
-func (db *DB) Query(ctx context.Context, sql string, vars interface{}) *SurrealWSRawResult {
+func (db *DB) Query(ctx *context.Context, sql string, vars interface{}) *SurrealWSRawResult {
 	return db.sendRaw(ctx, "query", sql, vars)
 }
 
 // Select a table or record from the database.
-func (db *DB) Select(ctx context.Context, what string) *SurrealWSResult {
+func (db *DB) Select(ctx *context.Context, what string) *SurrealWSResult {
 	return db.send(ctx, "select", what)
 }
 
 // Create a table or record in the database like a POST request.
-func (db *DB) Create(ctx context.Context, thing string, data interface{}) *SurrealWSResult {
+func (db *DB) Create(ctx *context.Context, thing string, data interface{}) *SurrealWSResult {
 	return db.send(ctx, "create", thing, data)
 }
 
 // Update a table or record in the database like a PUT request.
-func (db *DB) Update(ctx context.Context, what string, data interface{}) *SurrealWSResult {
+func (db *DB) Update(ctx *context.Context, what string, data interface{}) *SurrealWSResult {
 	return db.send(ctx, "update", what, data)
 }
 
 // Change a table or record in the database like a PATCH request.
-func (db *DB) Change(ctx context.Context, what string, data interface{}) *SurrealWSResult {
+func (db *DB) Change(ctx *context.Context, what string, data interface{}) *SurrealWSResult {
 	return db.send(ctx, "change", what, data)
 }
 
 // Modify applies a series of JSONPatches to a table or record.
-func (db *DB) Modify(ctx context.Context, what string, data []Patch) *SurrealWSResult {
+func (db *DB) Modify(ctx *context.Context, what string, data []Patch) *SurrealWSResult {
 	return db.send(ctx, "modify", what, data)
 }
 
 // Delete a table or a row from the database like a DELETE request.
-func (db *DB) Delete(ctx context.Context, what string) error {
+func (db *DB) Delete(ctx *context.Context, what string) error {
 	return db.send(ctx, "delete", what).Error
 }
 
@@ -284,12 +284,12 @@ func (db *DB) Delete(ctx context.Context, what string) error {
 // --------------------------------------------------
 
 // send is a helper method for sending a query to the database.
-func (db *DB) send(ctx context.Context, method string, params ...interface{}) *SurrealWSResult {
+func (db *DB) send(ctx *context.Context, method string, params ...interface{}) *SurrealWSResult {
 	response := sendMessage(db.ws, method, params)
 	for {
 		select {
-		case <-ctx.Done():
-			return &SurrealWSResult{Error: ctx.Err()}
+		case <-(*ctx).Done():
+			return &SurrealWSResult{Error: (*ctx).Err()}
 		case r := <-response:
 			resultBytes, err := parseResponse(r.Value)
 			result := SurrealWSResult{
@@ -306,13 +306,13 @@ func (db *DB) send(ctx context.Context, method string, params ...interface{}) *S
 	}
 }
 
-func (db *DB) sendRaw(ctx context.Context, method string, params ...interface{}) *SurrealWSRawResult {
+func (db *DB) sendRaw(ctx *context.Context, method string, params ...interface{}) *SurrealWSRawResult {
 	response := sendMessage(db.ws, method, params)
 	for {
 		select {
 		default:
-		case <-ctx.Done():
-			return &SurrealWSRawResult{Error: ctx.Err()}
+		case <-(*ctx).Done():
+			return &SurrealWSRawResult{Error: (*ctx).Err()}
 		case r := <-response:
 			resultBytes, err := parseRawResponse(r.Value)
 			return &SurrealWSRawResult{

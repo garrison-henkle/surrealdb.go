@@ -8,7 +8,7 @@ import "context"
 //Simple generic wrappers around db methods for convenience / code cleanliness
 //todo: not really performant atm
 
-func QueryAs[T any](ctx context.Context, db *DB, sql string, vars any) (*T, error) {
+func QueryAs[T any](ctx *context.Context, db *DB, sql string, vars any) (*T, error) {
 	var container T
 	err := db.Query(ctx, sql, vars).Unmarshal(&container)
 	if err != nil {
@@ -20,7 +20,7 @@ func QueryAs[T any](ctx context.Context, db *DB, sql string, vars any) (*T, erro
 	return &container, nil
 }
 
-func SelectAs[T any](ctx context.Context, db *DB, what string) (*T, error) {
+func SelectAs[T any](ctx *context.Context, db *DB, what string) (*T, error) {
 	var container T
 	err := db.Select(ctx, what).Unmarshal(&container)
 	if err != nil {
@@ -32,7 +32,7 @@ func SelectAs[T any](ctx context.Context, db *DB, what string) (*T, error) {
 	return &container, nil
 }
 
-func CreateAs[T any](ctx context.Context, db *DB, thing string, data any) (*T, error) {
+func CreateAs[T any](ctx *context.Context, db *DB, thing string, data any) (*T, error) {
 	var container T
 	err := db.Create(ctx, thing, data).Unmarshal(&container)
 	if err != nil {
@@ -44,7 +44,7 @@ func CreateAs[T any](ctx context.Context, db *DB, thing string, data any) (*T, e
 	return &container, nil
 }
 
-func UpdateAs[T any](ctx context.Context, db *DB, what string, data any) (*T, error) {
+func UpdateAs[T any](ctx *context.Context, db *DB, what string, data any) (*T, error) {
 	var container T
 	err := db.Update(ctx, what, data).Unmarshal(&container)
 	if err != nil {
@@ -56,7 +56,7 @@ func UpdateAs[T any](ctx context.Context, db *DB, what string, data any) (*T, er
 	return &container, nil
 }
 
-func ChangeAs[T any](ctx context.Context, db *DB, what string, data any) (*T, error) {
+func ChangeAs[T any](ctx *context.Context, db *DB, what string, data any) (*T, error) {
 	var container T
 	err := db.Change(ctx, what, data).Unmarshal(&container)
 	if err != nil {
@@ -68,7 +68,7 @@ func ChangeAs[T any](ctx context.Context, db *DB, what string, data any) (*T, er
 	return &container, nil
 }
 
-func ModifyAs[T any](ctx context.Context, db *DB, what string, data []Patch) (*T, error) {
+func ModifyAs[T any](ctx *context.Context, db *DB, what string, data []Patch) (*T, error) {
 	var container T
 	err := db.Modify(ctx, what, data).Unmarshal(&container)
 	if err != nil {
