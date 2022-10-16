@@ -141,30 +141,32 @@ func (r *SurrealWSRawResult) UnmarshalMultiQuery(v ...interface{}) []MultiQueryE
 			return
 		}
 
-		//check for empty result
-		resultLength = len(result)
-		if (resultLength - 2) <= 0 {
-			errorSlice = append(errorSlice, MultiQueryError{
-				QueryNumber: queryNumber,
-				Error:       ErrNoResult,
-			})
-			queryNumber++
-			return
-		}
+		if v[queryNumber] != nil {
+			//check for empty result
+			resultLength = len(result)
+			if (resultLength - 2) <= 0 {
+				errorSlice = append(errorSlice, MultiQueryError{
+					QueryNumber: queryNumber,
+					Error:       ErrNoResult,
+				})
+				queryNumber++
+				return
+			}
 
-		if isSlice(v[queryNumber]) {
-			jsonBytes = result
-		} else {
-			jsonBytes = result[1:(resultLength - 1)]
-		}
+			if isSlice(v[queryNumber]) {
+				jsonBytes = result
+			} else {
+				jsonBytes = result[1:(resultLength - 1)]
+			}
 
-		//todo replace this with something faster
-		err = json.Unmarshal(jsonBytes, v[queryNumber])
-		if err != nil {
-			errorSlice = append(errorSlice, MultiQueryError{
-				QueryNumber: queryNumber,
-				Error:       &ErrFailedUnmarshal{Cause: err},
-			})
+			//todo replace this with something faster
+			err = json.Unmarshal(jsonBytes, v[queryNumber])
+			if err != nil {
+				errorSlice = append(errorSlice, MultiQueryError{
+					QueryNumber: queryNumber,
+					Error:       &ErrFailedUnmarshal{Cause: err},
+				})
+			}
 		}
 
 		queryNumber++
